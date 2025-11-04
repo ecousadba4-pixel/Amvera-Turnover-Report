@@ -1,0 +1,18 @@
+name: u4s-revenue-api
+services:
+  - name: api
+    dockerfile: Dockerfile
+    http:
+      port: 8000
+    env:
+      - APP_ENV
+      - DATABASE_URL
+      - ADMIN_PASSWORD_SHA256
+      - CORS_ALLOW_ORIGINS
+      - PORT
+      - READ_ONLY
+routes:
+  - name: public
+    service: api
+    port: 8000
+    path: /
