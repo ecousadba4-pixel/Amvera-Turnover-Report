@@ -1,6 +1,6 @@
 // ======= Config =======
 const DEFAULT_API_BASE = "https://u4s-turnover-karinausadba.amvera.io";
-const DATE_FIELD = "checkout"; // 'checkout' | 'created' | 'checkin'
+const DATE_FIELD = "created"; // 'created' | 'checkin'
 
 function normalizeBase(url){
   return url.replace(/\/+$/, "");
@@ -47,6 +47,11 @@ const errBox = $("#err");
 const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
 const presetButtons = [btnCur, btnPrev, btnWknd];
+
+const FIELD_LABELS = {
+  created_at: "Дата создания (created_at)",
+  checkin_date: "Дата заезда (checkin_date)",
+};
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 
@@ -214,9 +219,10 @@ async function fetchMetrics(){
     minv.textContent = fmtRub(toNumber(json.min_booking));
     maxv.textContent = fmtRub(toNumber(json.max_booking));
 
-    if(json.used_field){
+    const fieldLabel = json.used_field ? FIELD_LABELS[json.used_field] || json.used_field : "";
+    if(fieldLabel){
       sysHint.classList.add("is-visible");
-      usedField.textContent = json.used_field;
+      usedField.textContent = fieldLabel;
     }else{
       sysHint.classList.remove("is-visible");
       usedField.textContent = "";

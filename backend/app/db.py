@@ -23,20 +23,3 @@ def get_conn(dsn: str) -> Iterator[psycopg.Connection]:
     pool = _get_pool(dsn)
     with pool.connection() as conn:
         yield conn
-
-
-@cache
-def column_exists(dsn: str, table: str, column: str) -> bool:
-    """Check whether a table column exists, caching the result for reuse."""
-
-    with get_conn(dsn) as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_name = %s AND column_name = %s
-            LIMIT 1
-            """,
-            (table, column),
-        )
-        return cur.fetchone() is not None

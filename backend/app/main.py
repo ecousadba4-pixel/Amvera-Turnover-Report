@@ -10,7 +10,7 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.db import column_exists, get_conn
+from app.db import get_conn
 from app.settings import get_settings
 
 settings = get_settings()
@@ -22,7 +22,6 @@ MIDNIGHT = time(hour=0, minute=0)
 
 
 class DateField(str, Enum):
-    checkout = "checkout"
     created = "created"
     checkin = "checkin"
 
@@ -70,10 +69,6 @@ def ensure_auth(x_auth_hash: AuthHeader) -> None:
 
 @cache
 def _resolve_date_field(dsn: str, wanted: DateField) -> DateFieldResolution:
-    if wanted is DateField.checkout:
-        if column_exists(dsn, "guests", "checkout_date"):
-            return DateFieldResolution("checkout_date", "checkout_date")
-        return DateFieldResolution("created_at", "fallback_created_at")
     if wanted is DateField.checkin:
         return DateFieldResolution("checkin_date", "checkin_date")
     return DateFieldResolution("created_at", "created_at")
@@ -107,7 +102,7 @@ def metrics(
     x_auth_hash: AuthHeader = None,
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
-    date_field: DateField = Query(default=DateField.checkout),
+    date_field: DateField = Query(default=DateField.created),
 ) -> MetricsResponse:
     ensure_auth(x_auth_hash)
 
