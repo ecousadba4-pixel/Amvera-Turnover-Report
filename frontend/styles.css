@@ -285,6 +285,11 @@ h2 {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    'revenue bonus'
+    'count   avg'
+    'repeat  min'
+    'stay    max';
 }
 
 .summary-card {
@@ -438,11 +443,10 @@ h2 {
     gap: 0.65rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      'revenue revenue'
-      'count repeat'
-      'avg min'
-      'max stay'
-      'bonus bonus';
+      'revenue bonus'
+      'count   avg'
+      'repeat  min'
+      'stay    max';
   }
 
   .summary-card {
