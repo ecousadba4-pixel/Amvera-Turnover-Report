@@ -2,7 +2,7 @@
 
 ## Backend (FastAPI on Amvera)
 - Auth: header `X-Auth-Hash` with SHA-256(password).
-- Endpoint: `GET /api/metrics?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&date_field=checkout|created|checkin`
+- Endpoint: `GET /api/metrics?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&date_field=created|checkin`
 
 ### Env vars (Amvera)
 - `APP_ENV=prod`
@@ -11,12 +11,6 @@
 - `CORS_ALLOW_ORIGINS=https://usadba4.ru,https://*.flexbe.com,https://*.flexbe.site`
 - `PORT=8000` (optional)
 - `READ_ONLY=false` (optional)
-
-### Optional DB migration
-```sql
-ALTER TABLE guests ADD COLUMN IF NOT EXISTS checkout_date DATE;
-CREATE INDEX IF NOT EXISTS idx_guests_checkout_date ON guests (checkout_date);
-```
 
 ## Frontend (Flexbe HTML block)
 - Single file: `frontend/revenue_dashboard.html`
