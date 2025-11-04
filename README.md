@@ -24,9 +24,13 @@ CREATE INDEX IF NOT EXISTS idx_guests_checkout_date ON guests (checkout_date);
 - Mobile-first (iPhone 17 Pro).
 
 ### Configure
-In HTML set:
-```js
-const API_BASE = "https://<your-amvera-domain>";
+По умолчанию фронтенд обращается к `https://u4s-turnover-karinausadba.amvera.io`.
+Если используется другой домен, перед подключением `app.js` задайте глобальную
+переменную:
+```html
+<script>
+  window.U4S_API_BASE = "https://<your-amvera-domain>";
+</script>
 ```
 
 ### Compute SHA-256 of password (Python)

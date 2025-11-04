@@ -7,14 +7,21 @@ function normalizeBase(url){
 }
 
 function resolveApiBase(){
-  if(typeof window.U4S_API_BASE === "string" && window.U4S_API_BASE.trim()){
-    return normalizeBase(window.U4S_API_BASE.trim());
+  const override = typeof window.U4S_API_BASE === "string" ? window.U4S_API_BASE.trim() : "";
+  if(override){
+    return normalizeBase(override);
   }
+
+  if(DEFAULT_API_BASE){
+    return normalizeBase(DEFAULT_API_BASE);
+  }
+
   const origin = window.location && window.location.origin;
   if(origin && origin !== "null" && origin !== "file://"){
     return normalizeBase(origin);
   }
-  return normalizeBase(DEFAULT_API_BASE);
+
+  return "";
 }
 
 const API_BASE = resolveApiBase();
