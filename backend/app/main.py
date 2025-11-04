@@ -37,6 +37,8 @@ class MetricsResponse(BaseModel):
     level2plus_share: float
     min_booking: float
     max_booking: float
+    avg_stay_days: float
+    bonus_payment_share: float
 
 
 AuthHeader = Annotated[Optional[str], Header(alias="X-Auth-Hash", convert_underscores=False)]
@@ -120,7 +122,9 @@ def metrics(
         COALESCE(MIN(total_amount),0)::numeric          AS min_booking,
         COALESCE(MAX(total_amount),0)::numeric          AS max_booking,
         COALESCE(AVG(total_amount),0)::numeric          AS avg_check,
-        COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END),0)::int AS lvl2p
+        COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END),0)::int AS lvl2p,
+        COALESCE(AVG((created_at::date - checkin_date)::numeric),0)::numeric AS avg_stay_days,
+        COALESCE(SUM(bonus_spent),0)::numeric           AS bonus_spent_sum
       FROM guests
       WHERE 1=1
         {filters}
@@ -133,16 +137,22 @@ def metrics(
     count = int(row.get("bookings_count", 0))
     lvl2p = int(row.get("lvl2p", 0))
     share = float(lvl2p / count) if count else 0.0
+    avg_stay_days = _as_float(row.get("avg_stay_days"))
+    bonus_spent_sum = _as_float(row.get("bonus_spent_sum"))
+    revenue_total = _as_float(row.get("revenue"))
+    bonus_share = float(bonus_spent_sum / revenue_total) if revenue_total else 0.0
 
     return MetricsResponse(
         used_field=resolution.column,
         used_reason=resolution.reason,
         date_from=date_from,
         date_to=date_to,
-        revenue=_as_float(row.get("revenue")),
+        revenue=revenue_total,
         avg_check=_as_float(row.get("avg_check")),
         bookings_count=count,
         level2plus_share=share,
         min_booking=_as_float(row.get("min_booking")),
         max_booking=_as_float(row.get("max_booking")),
+        avg_stay_days=avg_stay_days,
+        bonus_payment_share=bonus_share,
     )
