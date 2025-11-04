@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Выручка</title>
+  <style>
+    :root{
+      --bg:#0c0d0c; --card:#131413; --muted:#9aa0a6; --fg:#e7e9ea; --brand:#8a9d4c;
+      --gap:14px; --radius:16px;
+      --shadow: 0 1px 2px rgba(0,0,0,.2), 0 6px 24px rgba(0,0,0,.22);
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif; background:var(--bg); color:var(--fg)}
+    .wrap{padding:16px; max-width:860px; margin:0 auto}
+    h1{font-size:22px; margin:0 0 12px 0}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:var(--gap)}
+    @media (min-width:720px){ .row{grid-template-columns:repeat(4,1fr)} }
+    .card{background:var(--card); border:1px solid #1d1f1d; border-radius:var(--radius); padding:16px; box-shadow: var(--shadow)}
+    .head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px}
+    .muted{color:var(--muted); font-size:12px}
+    input[type="date"]{width:100%; border:1px solid #282b28; background:#101110; color:var(--fg); border-radius:12px; padding:10px 12px; font-size:14px}
+    button{border:1px solid #2b2f2b; background:#141514; color:var(--fg); border-radius:12px; padding:10px 12px; font-size:14px}
+    .kpis{display:grid; grid-template-columns:1fr 1fr; gap:var(--gap); margin-top:var(--gap)}
+    @media (min-width:720px){ .kpis{grid-template-columns:repeat(6,1fr)} }
+    .kpi{background:var(--card); border:1px solid #1d1f1d; border-radius:var(--radius); padding:14px; box-shadow: var(--shadow)}
+    .kpi .title{font-size:12px; color:var(--muted); margin-bottom:6px}
+    .kpi .val{font-size:18px; font-weight:600}
+    .brand{color:var(--brand)}
+    .badge{font-size:11px; padding:2px 8px; border-radius:999px; background:#1b1d1b; border:1px solid #2a2d2a}
+    /* Password overlay */
+    .overlay{position:fixed; inset:0; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; z-index:9999}
+    .overlay .modal{background:#0f100f; border:1px solid #1d1f1d; border-radius:18px; padding:18px; width:min(92vw,420px); box-shadow: var(--shadow)}
+    .overlay h2{margin:0 0 12px 0; font-size:18px}
+    .err{color:#ff6b6b; font-size:12px; min-height:16px}
+    .hint{font-size:12px; color:var(--muted); margin-top:8px}
+    .footer{margin-top:14px; display:flex; gap:8px; justify-content:flex-end}
+    .presetbar{display:flex; gap:8px; flex-wrap:wrap}
+    .presetbar button{height:34px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Выручка</h1>
+    <div style="display:flex; gap:8px; align-items:center">
+      <span class="badge" id="presetLabel">Текущий месяц</span>
+      <button id="resetBtn">Сбросить</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted" style="margin-bottom:8px">Фильтр по дате выезда</div>
+
+    <div class="presetbar" style="margin-bottom:10px">
+      <button id="btnCur">Текущий месяц</button>
+      <button id="btnPrev">Прошлый месяц</button>
+      <button id="btnWknd">Последние выходные</button>
+    </div>
+
+    <div class="row">
+      <div>
+        <label class="muted">От</label>
+        <input type="date" id="from" />
+      </div>
+      <div>
+        <label class="muted">До</label>
+        <input type="date" id="to" />
+      </div>
+    </div>
+    <div class="hint">Если в БД нет <code>checkout_date</code>, бэкенд автоматически использует <code>created_at</code>.</div>
+  </div>
+
+  <div class="kpis" style="margin-bottom:8px">
+    <div class="kpi"><div class="title">Выручка всего</div><div class="val" id="revenue">—</div></div>
+    <div class="kpi"><div class="title">Средний чек</div><div class="val" id="avg">—</div></div>
+    <div class="kpi"><div class="title">Кол-во бронирований</div><div class="val" id="count">—</div></div>
+    <div class="kpi"><div class="title">Доля ≥ 2 СЕЗОНА</div><div class="val" id="share">—</div></div>
+    <div class="kpi"><div class="title">Мин. чек</div><div class="val" id="min">—</div></div>
+    <div class="kpi"><div class="title">Макс. чек</div><div class="val" id="max">—</div></div>
+  </div>
+
+  <div class="card" id="sysHint" style="display:none">
+    <div class="muted">Источник даты: <span id="usedField" class="brand"></span></div>
+  </div>
+</div>
+
+<!-- Password overlay -->
+<div class="overlay" id="gate">
+  <div class="modal">
+    <h2>Доступ по паролю</h2>
+    <div class="muted">Введите пароль для просмотра показателей</div>
+    <div style="margin:12px 0">
+      <input type="password" id="pwd" placeholder="Пароль" style="width:100%; padding:12px; border-radius:12px; border:1px solid #2b2f2b; background:#101110; color:#fff" />
+    </div>
+    <div class="err" id="err"></div>
+    <div class="footer">
+      <button id="goBtn">Войти</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ======= Config =======
+const API_BASE = (window.U4S_API_BASE || "https://your-amvera-app.example.com");
+const DATE_FIELD = "checkout"; // 'checkout' | 'created' | 'checkin'
+
+const $ = (sel) => document.querySelector(sel);
+const from = $("#from"), to = $("#to");
+const revenue=$("#revenue"), avg=$("#avg"), count=$("#count"), share=$("#share"), minv=$("#min"), maxv=$("#max");
+const usedField=$("#usedField"), sysHint=$("#sysHint"), presetLabel=$("#presetLabel");
+const resetBtn=$("#resetBtn");
+const btnCur=$("#btnCur"), btnPrev=$("#btnPrev"), btnWknd=$("#btnWknd");
+
+const fmtRub = v => new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(v);
+const fmtPct = v => new Intl.NumberFormat("ru-RU",{style:"percent",maximumFractionDigits:1}).format(v);
+
+let authHash = null;
+
+// Date helpers
+const pad2 = (n) => String(n).padStart(2,"0");
+const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+
+function setPresetLabel(txt){ presetLabel.textContent = txt; }
+
+function setCurrentMonth(){
+  const now = new Date();
+  const f = new Date(now.getFullYear(), now.getMonth(), 1);
+  const t = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  from.value = fmtYMD(f); to.value = fmtYMD(t);
+  setPresetLabel("Текущий месяц");
+}
+
+function setLastMonth(){
+  const now = new Date();
+  const f = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const t = new Date(now.getFullYear(), now.getMonth(), 0);
+  from.value = fmtYMD(f); to.value = fmtYMD(t);
+  setPresetLabel("Прошлый месяц");
+}
+
+function setLastWeekend(){
+  const now = new Date();
+  const day = now.getDay(); // 0 Sun .. 6 Sat
+  // last Saturday:
+  const deltaToSat = (day + 1); // if Sun(0)->1, Mon(1)->2, ..., Sat(6)->7
+  const sat = new Date(now); sat.setDate(now.getDate() - (day === 6 ? 0 : day + 1));
+  const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
+  from.value = fmtYMD(sat); to.value = fmtYMD(sun);
+  setPresetLabel("Последние выходные");
+}
+
+async function sha256Hex(str){
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+async function fetchMetrics(){
+  if(!authHash) return;
+  const params = new URLSearchParams();
+  if(from.value) params.set("date_from", from.value);
+  if(to.value) params.set("date_to", to.value);
+  params.set("date_field", DATE_FIELD);
+  const url = API_BASE + "/api/metrics?" + params.toString();
+
+  const resp = await fetch(url, { headers: { "X-Auth-Hash": authHash }});
+  if(resp.status === 401 || resp.status === 403){
+    document.getElementById("gate").style.display="flex";
+    document.getElementById("err").textContent="Неверный пароль или сессия истекла.";
+    return;
+  }
+  if(!resp.ok){ throw new Error("HTTP "+resp.status); }
+  const json = await resp.json();
+
+  revenue.textContent = fmtRub(json.revenue || 0);
+  avg.textContent     = fmtRub(json.avg_check || 0);
+  count.textContent   = String(json.bookings_count || 0);
+  share.textContent   = fmtPct(json.level2plus_share || 0);
+  minv.textContent    = fmtRub(json.min_booking || 0);
+  maxv.textContent    = fmtRub(json.max_booking || 0);
+
+  if(json.used_field){
+    sysHint.style.display = "block";
+    usedField.textContent = json.used_field;
+  }
+}
+
+["change","input"].forEach(evt=>{
+  from.addEventListener(evt, fetchMetrics);
+  to.addEventListener(evt, fetchMetrics);
+});
+resetBtn.addEventListener("click", ()=>{
+  setCurrentMonth();
+  fetchMetrics();
+});
+btnCur.addEventListener("click", ()=>{ setCurrentMonth(); fetchMetrics(); });
+btnPrev.addEventListener("click", ()=>{ setLastMonth(); fetchMetrics(); });
+btnWknd.addEventListener("click", ()=>{ setLastWeekend(); fetchMetrics(); });
+
+// Password gate
+document.getElementById("goBtn").addEventListener("click", async ()=>{
+  const pwd = document.getElementById("pwd").value || "";
+  if(!pwd) { document.getElementById("err").textContent="Введите пароль"; return; }
+  authHash = await sha256Hex(pwd);
+  try {
+    if(!from.value || !to.value){ setCurrentMonth(); }
+    await fetchMetrics();
+    document.getElementById("gate").style.display="none";
+    document.getElementById("err").textContent="";
+  } catch(e){
+    document.getElementById("err").textContent="Ошибка загрузки: "+e.message;
+  }
+});
+
+// init default preset
+setCurrentMonth();
+</script>
+</body>
+</html>
