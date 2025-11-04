@@ -35,8 +35,6 @@ const count = $("#count");
 const share = $("#share");
 const minv = $("#min");
 const maxv = $("#max");
-const usedField = $("#usedField");
-const sysHint = $("#sysHint");
 const presetLabel = $("#presetLabel");
 const resetBtn = $("#resetBtn");
 const btnCur = $("#btnCur");
@@ -47,11 +45,6 @@ const errBox = $("#err");
 const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
 const presetButtons = [btnCur, btnPrev, btnWknd];
-
-const FIELD_LABELS = {
-  created_at: "Дата создания (created_at)",
-  checkin_date: "Дата заезда (checkin_date)",
-};
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 
@@ -219,14 +212,6 @@ async function fetchMetrics(){
     minv.textContent = fmtRub(toNumber(json.min_booking));
     maxv.textContent = fmtRub(toNumber(json.max_booking));
 
-    const fieldLabel = json.used_field ? FIELD_LABELS[json.used_field] || json.used_field : "";
-    if(fieldLabel){
-      sysHint.classList.add("is-visible");
-      usedField.textContent = fieldLabel;
-    }else{
-      sysHint.classList.remove("is-visible");
-      usedField.textContent = "";
-    }
     return true;
   }catch(e){
     console.error("Ошибка загрузки метрик", e);
