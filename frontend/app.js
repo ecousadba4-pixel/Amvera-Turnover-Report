@@ -39,6 +39,7 @@ const gate = $("#gate");
 const errBox = $("#err");
 const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
+const presetButtons = [btnCur, btnPrev, btnWknd];
 
 const fmtRub = (v) => new Intl.NumberFormat("ru-RU", {
   style: "currency",
@@ -59,6 +60,15 @@ const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.get
 
 function setPresetLabel(txt){
   presetLabel.textContent = txt;
+}
+
+function setActivePreset(btn){
+  presetButtons.forEach((b) => {
+    if(!b){
+      return;
+    }
+    b.classList.toggle("is-active", b === btn);
+  });
 }
 
 function setCurrentMonth(){
@@ -137,36 +147,49 @@ async function fetchMetrics(){
   maxv.textContent = fmtRub(json.max_booking || 0);
 
   if(json.used_field){
-    sysHint.style.display = "block";
+    sysHint.classList.add("is-visible");
     usedField.textContent = json.used_field;
+  }else{
+    sysHint.classList.remove("is-visible");
+    usedField.textContent = "";
   }
 }
 
 function bindDateListeners(){
   ["change", "input"].forEach((evt) => {
-    from.addEventListener(evt, fetchMetrics);
-    to.addEventListener(evt, fetchMetrics);
+    from.addEventListener(evt, () => {
+      setActivePreset(null);
+      fetchMetrics();
+    });
+    to.addEventListener(evt, () => {
+      setActivePreset(null);
+      fetchMetrics();
+    });
   });
 }
 
 function bindPresetButtons(){
   resetBtn.addEventListener("click", () => {
     setCurrentMonth();
+    setActivePreset(btnCur);
     fetchMetrics();
   });
 
   btnCur.addEventListener("click", () => {
     setCurrentMonth();
+    setActivePreset(btnCur);
     fetchMetrics();
   });
 
   btnPrev.addEventListener("click", () => {
     setLastMonth();
+    setActivePreset(btnPrev);
     fetchMetrics();
   });
 
   btnWknd.addEventListener("click", () => {
     setLastWeekend();
+    setActivePreset(btnWknd);
     fetchMetrics();
   });
 }
@@ -207,6 +230,7 @@ function bindPasswordForm(){
 
 function init(){
   setCurrentMonth();
+  setActivePreset(btnCur);
   bindDateListeners();
   bindPresetButtons();
   bindPasswordForm();
