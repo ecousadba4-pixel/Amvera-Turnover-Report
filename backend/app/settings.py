@@ -2,7 +2,7 @@ import hashlib
 import string
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "prod"
@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     cors_allow_origins: str = ""  # comma-separated list of origins
     port: int = 8000
     read_only: bool = False
+
+    model_config = SettingsConfigDict(
+        env_prefix="",
+        env_file=".env",
+        case_sensitive=False,
+    )
 
     @field_validator("admin_password_sha256", mode="before")
     @classmethod
@@ -27,11 +33,6 @@ class Settings(BaseSettings):
 
         # treat non-hex values as plain-text passwords and hash them automatically
         return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
-
-    class Config:
-        env_prefix = ""
-        env_file = ".env"
-        case_sensitive = False
 
 def get_settings() -> "Settings":
     return Settings()

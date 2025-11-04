@@ -80,6 +80,7 @@ const fmtNumber = (v, fractionDigits = 0) =>
 
 let authHash = null;
 let fetchMetricsTimer = null;
+let activeFetchController = null;
 
 function cancelScheduledFetch(){
   if(fetchMetricsTimer !== null){
@@ -94,6 +95,17 @@ function scheduleFetchMetrics(){
     fetchMetricsTimer = null;
     fetchMetrics();
   }, FETCH_DEBOUNCE_DELAY);
+}
+
+function resetActiveFetchController(){
+  if(activeFetchController){
+    activeFetchController.abort();
+    activeFetchController = null;
+  }
+}
+
+function isAbortError(error){
+  return Boolean(error && error.name === "AbortError");
 }
 
 function getStoredHash(){
@@ -206,6 +218,13 @@ async function fetchMetrics(){
   if(!authHash){
     return false;
   }
+  if(!API_BASE){
+    console.error("Базовый URL API не сконфигурирован");
+    return false;
+  }
+  resetActiveFetchController();
+  const controller = new AbortController();
+  activeFetchController = controller;
   document.body.classList.add("is-loading");
   const params = new URLSearchParams();
   if(from.value){
@@ -220,6 +239,7 @@ async function fetchMetrics(){
   try{
     const resp = await fetch(url, {
       headers: { "X-Auth-Hash": authHash },
+      signal: controller.signal,
     });
 
     if(resp.status === 401 || resp.status === 403){
@@ -251,13 +271,19 @@ async function fetchMetrics(){
 
     return true;
   }catch(e){
+    if(isAbortError(e)){
+      return false;
+    }
     console.error("Ошибка загрузки метрик", e);
     if(gate.style.display !== "none"){
       errBox.textContent = `Ошибка загрузки: ${e.message}`;
     }
     return false;
   }finally{
-    document.body.classList.remove("is-loading");
+    if(activeFetchController === controller){
+      activeFetchController = null;
+      document.body.classList.remove("is-loading");
+    }
   }
 }
 
