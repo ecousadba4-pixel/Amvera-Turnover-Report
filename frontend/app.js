@@ -37,6 +37,7 @@ const minv = $("#min");
 const maxv = $("#max");
 const stay = $("#stay");
 const bonus = $("#bonus");
+const refreshBtn = $("#refreshBtn");
 const presetLabel = $("#presetLabel");
 const resetBtn = $("#resetBtn");
 const btnCur = $("#btnCur");
@@ -49,6 +50,7 @@ const goBtn = $("#goBtn");
 const presetButtons = [btnCur, btnPrev, btnWknd];
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
+const FETCH_DEBOUNCE_DELAY = 600;
 
 function canUseSessionStorage(){
   try{
@@ -77,6 +79,22 @@ const fmtNumber = (v, fractionDigits = 0) =>
   }).format(v);
 
 let authHash = null;
+let fetchMetricsTimer = null;
+
+function cancelScheduledFetch(){
+  if(fetchMetricsTimer !== null){
+    clearTimeout(fetchMetricsTimer);
+    fetchMetricsTimer = null;
+  }
+}
+
+function scheduleFetchMetrics(){
+  cancelScheduledFetch();
+  fetchMetricsTimer = window.setTimeout(() => {
+    fetchMetricsTimer = null;
+    fetchMetrics();
+  }, FETCH_DEBOUNCE_DELAY);
+}
 
 function getStoredHash(){
   if(!canUseSessionStorage()){
@@ -247,11 +265,11 @@ function bindDateListeners(){
   ["change", "input"].forEach((evt) => {
     from.addEventListener(evt, () => {
       setActivePreset(null);
-      fetchMetrics();
+      scheduleFetchMetrics();
     });
     to.addEventListener(evt, () => {
       setActivePreset(null);
-      fetchMetrics();
+      scheduleFetchMetrics();
     });
   });
 }
@@ -260,24 +278,38 @@ function bindPresetButtons(){
   resetBtn.addEventListener("click", () => {
     setCurrentMonth();
     setActivePreset(btnCur);
+    cancelScheduledFetch();
     fetchMetrics();
   });
 
   btnCur.addEventListener("click", () => {
     setCurrentMonth();
     setActivePreset(btnCur);
+    cancelScheduledFetch();
     fetchMetrics();
   });
 
   btnPrev.addEventListener("click", () => {
     setLastMonth();
     setActivePreset(btnPrev);
+    cancelScheduledFetch();
     fetchMetrics();
   });
 
   btnWknd.addEventListener("click", () => {
     setLastWeekend();
     setActivePreset(btnWknd);
+    cancelScheduledFetch();
+    fetchMetrics();
+  });
+}
+
+function bindRefreshButton(){
+  if(!refreshBtn){
+    return;
+  }
+  refreshBtn.addEventListener("click", () => {
+    cancelScheduledFetch();
     fetchMetrics();
   });
 }
@@ -300,6 +332,7 @@ function bindPasswordForm(){
       if(!from.value || !to.value){
         setCurrentMonth();
       }
+      cancelScheduledFetch();
       const ok = await fetchMetrics();
       if(ok){
         pwdInput.value = "";
@@ -325,6 +358,7 @@ function init(){
   setActivePreset(btnCur);
   bindDateListeners();
   bindPresetButtons();
+  bindRefreshButton();
   bindPasswordForm();
   const stored = getStoredHash();
   if(stored){
