@@ -7,66 +7,85 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-<div class="wrap">
-  <div class="head">
-    <h1>Выручка</h1>
-    <div style="display:flex; gap:8px; align-items:center">
-      <span class="badge" id="presetLabel">Текущий месяц</span>
-      <button id="resetBtn">Сбросить</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="muted" style="margin-bottom:8px">Фильтр по дате выезда</div>
-
-    <div class="presetbar" style="margin-bottom:10px">
-      <button id="btnCur">Текущий месяц</button>
-      <button id="btnPrev">Прошлый месяц</button>
-      <button id="btnWknd">Последние выходные</button>
-    </div>
-
-    <div class="row">
-      <div>
-        <label class="muted">От</label>
-        <input type="date" id="from" />
+  <div class="centered">
+    <div class="dashboard">
+      <div class="form-header">
+        <h1>Выручка</h1>
+        <div class="header-actions">
+          <span class="period-pill" id="presetLabel">Текущий месяц</span>
+          <button class="link-button" id="resetBtn" type="button">Сбросить</button>
+        </div>
       </div>
-      <div>
-        <label class="muted">До</label>
-        <input type="date" id="to" />
+
+      <div class="card filter-card">
+        <div class="section-title">Фильтр по дате выезда</div>
+
+        <div class="presetbar">
+          <button class="preset-button is-active" id="btnCur" type="button">Текущий месяц</button>
+          <button class="preset-button" id="btnPrev" type="button">Прошлый месяц</button>
+          <button class="preset-button" id="btnWknd" type="button">Последние выходные</button>
+        </div>
+
+        <div class="form-grid two-column">
+          <div class="form-group">
+            <label for="from">От</label>
+            <input type="date" id="from" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label for="to">До</label>
+            <input type="date" id="to" class="form-input" />
+          </div>
+        </div>
+        <div class="help-text">Если в БД нет <code>checkout_date</code>, бэкенд автоматически использует <code>created_at</code>.</div>
+      </div>
+
+      <div class="info-summary">
+        <div class="summary-card">
+          <div class="summary-label">Выручка всего</div>
+          <div class="summary-value" id="revenue">—</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Средний чек</div>
+          <div class="summary-value" id="avg">—</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Кол-во бронирований</div>
+          <div class="summary-value" id="count">—</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Доля ≥ 2 сезона</div>
+          <div class="summary-value" id="share">—</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Мин. чек</div>
+          <div class="summary-value" id="min">—</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Макс. чек</div>
+          <div class="summary-value" id="max">—</div>
+        </div>
+      </div>
+
+      <div class="card system-card" id="sysHint">
+        <div class="label">Источник даты: <span class="value" id="usedField"></span></div>
       </div>
     </div>
-    <div class="hint">Если в БД нет <code>checkout_date</code>, бэкенд автоматически использует <code>created_at</code>.</div>
   </div>
 
-  <div class="kpis" style="margin-bottom:8px">
-    <div class="kpi"><div class="title">Выручка всего</div><div class="val" id="revenue">—</div></div>
-    <div class="kpi"><div class="title">Средний чек</div><div class="val" id="avg">—</div></div>
-    <div class="kpi"><div class="title">Кол-во бронирований</div><div class="val" id="count">—</div></div>
-    <div class="kpi"><div class="title">Доля ≥ 2 СЕЗОНА</div><div class="val" id="share">—</div></div>
-    <div class="kpi"><div class="title">Мин. чек</div><div class="val" id="min">—</div></div>
-    <div class="kpi"><div class="title">Макс. чек</div><div class="val" id="max">—</div></div>
-  </div>
-
-  <div class="card" id="sysHint" style="display:none">
-    <div class="muted">Источник даты: <span id="usedField" class="brand"></span></div>
-  </div>
-</div>
-
-<!-- Password overlay -->
-<div class="overlay" id="gate">
-  <div class="modal">
-    <h2>Доступ по паролю</h2>
-    <div class="muted">Введите пароль для просмотра показателей</div>
-    <div style="margin:12px 0">
-      <input type="password" id="pwd" placeholder="Пароль" style="width:100%; padding:12px; border-radius:12px; border:1px solid #2b2f2b; background:#101110; color:#fff" />
-    </div>
-    <div class="err" id="err"></div>
-    <div class="footer">
-      <button id="goBtn">Войти</button>
+  <div class="overlay" id="gate">
+    <div class="modal">
+      <h2>Доступ по паролю</h2>
+      <p class="modal-text">Введите пароль, чтобы открыть показатели выручки.</p>
+      <div>
+        <input type="password" id="pwd" placeholder="Пароль" />
+      </div>
+      <div class="err" id="err"></div>
+      <div class="footer">
+        <button id="goBtn" type="button">Войти</button>
+      </div>
     </div>
   </div>
-</div>
 
-<script src="app.js" defer></script>
+  <script src="app.js" defer></script>
 </body>
 </html>
