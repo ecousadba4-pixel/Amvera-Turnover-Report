@@ -188,6 +188,7 @@ async function fetchMetrics(){
   if(!authHash){
     return false;
   }
+  document.body.classList.add("is-loading");
   const params = new URLSearchParams();
   if(from.value){
     params.set("date_from", from.value);
@@ -237,6 +238,8 @@ async function fetchMetrics(){
       errBox.textContent = `Ошибка загрузки: ${e.message}`;
     }
     return false;
+  }finally{
+    document.body.classList.remove("is-loading");
   }
 }
 
