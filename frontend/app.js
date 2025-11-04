@@ -35,6 +35,8 @@ const count = $("#count");
 const share = $("#share");
 const minv = $("#min");
 const maxv = $("#max");
+const stay = $("#stay");
+const bonus = $("#bonus");
 const presetLabel = $("#presetLabel");
 const resetBtn = $("#resetBtn");
 const btnCur = $("#btnCur");
@@ -62,10 +64,17 @@ const fmtRub = (v) => new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
 }).format(v);
 
-const fmtPct = (v) => new Intl.NumberFormat("ru-RU", {
+const fmtPct = (v, fractionDigits = 1) => new Intl.NumberFormat("ru-RU", {
   style: "percent",
-  maximumFractionDigits: 1,
+  minimumFractionDigits: fractionDigits,
+  maximumFractionDigits: fractionDigits,
 }).format(v);
+
+const fmtNumber = (v, fractionDigits = 0) =>
+  new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(v);
 
 let authHash = null;
 
@@ -210,9 +219,16 @@ async function fetchMetrics(){
     revenue.textContent = fmtRub(toNumber(json.revenue));
     avg.textContent = fmtRub(toNumber(json.avg_check));
     count.textContent = String(json.bookings_count || 0);
-    share.textContent = fmtPct(toNumber(json.level2plus_share));
+    share.textContent = fmtPct(toNumber(json.level2plus_share), 0);
     minv.textContent = fmtRub(toNumber(json.min_booking));
     maxv.textContent = fmtRub(toNumber(json.max_booking));
+    if(stay){
+      const stayValue = toNumber(json.avg_stay_days);
+      stay.textContent = `${fmtNumber(stayValue, 1)} дн.`;
+    }
+    if(bonus){
+      bonus.textContent = fmtPct(toNumber(json.bonus_payment_share), 1);
+    }
 
     return true;
   }catch(e){
