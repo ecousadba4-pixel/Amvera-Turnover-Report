@@ -1,22 +1,32 @@
 from __future__ import annotations
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from enum import Enum
-from functools import cache
 from hmac import compare_digest
 from typing import Annotated, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.db import get_conn
+from app.db import close_all_pools, get_conn
 from app.settings import get_settings
 
 settings = get_settings()
 ADMIN_HASH = settings.admin_password_sha256.lower()
 
-app = FastAPI(title="U4S Revenue API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Manage global resources for the application lifecycle."""
+
+    try:
+        yield
+    finally:
+        close_all_pools()
+
+
+app = FastAPI(title="U4S Revenue API", version="1.0.0", lifespan=lifespan)
 
 MIDNIGHT = time(hour=0, minute=0)
 
@@ -49,6 +59,23 @@ class DateFieldResolution:
     column: str
     reason: str
 
+
+def require_admin_auth(x_auth_hash: AuthHeader) -> str:
+    """Validate the admin hash header and return the normalized value."""
+
+    if not x_auth_hash:
+        raise HTTPException(status_code=401, detail="Missing auth")
+
+    normalized = x_auth_hash.strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=401, detail="Missing auth")
+
+    if not compare_digest(normalized, ADMIN_HASH):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return normalized
+
+
 # CORS
 origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
 if origins:
@@ -60,20 +87,14 @@ if origins:
         allow_credentials=False,
     )
 
-def ensure_auth(x_auth_hash: AuthHeader) -> None:
-    if not x_auth_hash:
-        raise HTTPException(status_code=401, detail="Missing auth")
-    normalized = x_auth_hash.strip().lower()
-    if not normalized:
-        raise HTTPException(status_code=401, detail="Missing auth")
-    if not compare_digest(normalized, ADMIN_HASH):
-        raise HTTPException(status_code=403, detail="Forbidden")
+_DATE_FIELD_RESOLUTIONS = {
+    DateField.checkin: DateFieldResolution("checkin_date", "checkin_date"),
+    DateField.created: DateFieldResolution("created_at", "created_at"),
+}
 
-@cache
-def _resolve_date_field(dsn: str, wanted: DateField) -> DateFieldResolution:
-    if wanted is DateField.checkin:
-        return DateFieldResolution("checkin_date", "checkin_date")
-    return DateFieldResolution("created_at", "created_at")
+
+def _resolve_date_field(wanted: DateField) -> DateFieldResolution:
+    return _DATE_FIELD_RESOLUTIONS.get(wanted, _DATE_FIELD_RESOLUTIONS[DateField.created])
 
 @app.get("/health")
 def health():
@@ -101,18 +122,16 @@ def _as_float(value: object) -> float:
 
 @app.get("/api/metrics", response_model=MetricsResponse)
 def metrics(
-    x_auth_hash: AuthHeader = None,
+    _: str = Depends(require_admin_auth),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     date_field: DateField = Query(default=DateField.created),
 ) -> MetricsResponse:
-    ensure_auth(x_auth_hash)
-
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=422, detail="date_from must be before or equal to date_to")
 
     dsn = settings.database_url
-    resolution = _resolve_date_field(dsn, date_field)
+    resolution = _resolve_date_field(date_field)
     filters, params = _build_filters(resolution, date_from, date_to)
 
     sql = f"""
