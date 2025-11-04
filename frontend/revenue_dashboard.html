@@ -102,7 +102,24 @@
 
 <script>
 // ======= Config =======
-const API_BASE = (window.U4S_API_BASE || "https://your-amvera-app.example.com");
+const DEFAULT_API_BASE = "https://u4s-turnover-karinausadba.amvera.io";
+
+function normalizeBase(url){
+  return url.replace(/\/+$/, "");
+}
+
+function resolveApiBase(){
+  if(typeof window.U4S_API_BASE === "string" && window.U4S_API_BASE.trim()){
+    return normalizeBase(window.U4S_API_BASE.trim());
+  }
+  const origin = window.location && window.location.origin;
+  if(origin && origin !== "null" && origin !== "file://"){
+    return normalizeBase(origin);
+  }
+  return normalizeBase(DEFAULT_API_BASE);
+}
+
+const API_BASE = resolveApiBase();
 const DATE_FIELD = "checkout"; // 'checkout' | 'created' | 'checkin'
 
 const $ = (sel) => document.querySelector(sel);
