@@ -48,6 +48,16 @@ const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
 const presetButtons = [btnCur, btnPrev, btnWknd];
 
+const STORAGE_KEY = "u4sRevenueAuthHash";
+
+function canUseSessionStorage(){
+  try{
+    return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+  }catch(e){
+    return false;
+  }
+}
+
 const fmtRub = (v) => new Intl.NumberFormat("ru-RU", {
   style: "currency",
   currency: "RUB",
@@ -60,6 +70,55 @@ const fmtPct = (v) => new Intl.NumberFormat("ru-RU", {
 }).format(v);
 
 let authHash = null;
+
+function getStoredHash(){
+  if(!canUseSessionStorage()){
+    return null;
+  }
+  try{
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  }catch(e){
+    console.warn("Не удалось прочитать сохранённый пароль из sessionStorage", e);
+    return null;
+  }
+}
+
+function persistHash(hash){
+  if(!canUseSessionStorage()){
+    return;
+  }
+  try{
+    if(hash){
+      window.sessionStorage.setItem(STORAGE_KEY, hash);
+    }else{
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    }
+  }catch(e){
+    console.warn("Не удалось сохранить пароль в sessionStorage", e);
+  }
+}
+
+function showGate(message = ""){
+  gate.style.display = "flex";
+  errBox.textContent = message;
+  setTimeout(() => pwdInput.focus(), 0);
+}
+
+function hideGate(){
+  gate.style.display = "none";
+  errBox.textContent = "";
+}
+
+function toNumber(value){
+  if(typeof value === "number" && Number.isFinite(value)){
+    return value;
+  }
+  if(typeof value === "string" && value.trim() !== ""){
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
 
 // Date helpers
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -118,7 +177,7 @@ async function sha256Hex(str){
 
 async function fetchMetrics(){
   if(!authHash){
-    return;
+    return false;
   }
   const params = new URLSearchParams();
   if(from.value){
@@ -130,35 +189,45 @@ async function fetchMetrics(){
   params.set("date_field", DATE_FIELD);
   const url = `${API_BASE}/api/metrics?${params.toString()}`;
 
-  const resp = await fetch(url, {
-    headers: { "X-Auth-Hash": authHash },
-  });
+  try{
+    const resp = await fetch(url, {
+      headers: { "X-Auth-Hash": authHash },
+    });
 
-  if(resp.status === 401 || resp.status === 403){
-    gate.style.display = "flex";
-    errBox.textContent = "Неверный пароль или сессия истекла.";
-    return;
-  }
+    if(resp.status === 401 || resp.status === 403){
+      persistHash(null);
+      authHash = null;
+      showGate("Неверный пароль или сессия истекла.");
+      return false;
+    }
 
-  if(!resp.ok){
-    throw new Error(`HTTP ${resp.status}`);
-  }
+    if(!resp.ok){
+      throw new Error(`HTTP ${resp.status}`);
+    }
 
-  const json = await resp.json();
+    const json = await resp.json();
 
-  revenue.textContent = fmtRub(json.revenue || 0);
-  avg.textContent = fmtRub(json.avg_check || 0);
-  count.textContent = String(json.bookings_count || 0);
-  share.textContent = fmtPct(json.level2plus_share || 0);
-  minv.textContent = fmtRub(json.min_booking || 0);
-  maxv.textContent = fmtRub(json.max_booking || 0);
+    revenue.textContent = fmtRub(toNumber(json.revenue));
+    avg.textContent = fmtRub(toNumber(json.avg_check));
+    count.textContent = String(json.bookings_count || 0);
+    share.textContent = fmtPct(toNumber(json.level2plus_share));
+    minv.textContent = fmtRub(toNumber(json.min_booking));
+    maxv.textContent = fmtRub(toNumber(json.max_booking));
 
-  if(json.used_field){
-    sysHint.classList.add("is-visible");
-    usedField.textContent = json.used_field;
-  }else{
-    sysHint.classList.remove("is-visible");
-    usedField.textContent = "";
+    if(json.used_field){
+      sysHint.classList.add("is-visible");
+      usedField.textContent = json.used_field;
+    }else{
+      sysHint.classList.remove("is-visible");
+      usedField.textContent = "";
+    }
+    return true;
+  }catch(e){
+    console.error("Ошибка загрузки метрик", e);
+    if(gate.style.display !== "none"){
+      errBox.textContent = `Ошибка загрузки: ${e.message}`;
+    }
+    return false;
   }
 }
 
@@ -215,11 +284,15 @@ function bindPasswordForm(){
 
     try{
       authHash = await sha256Hex(pwd);
+      persistHash(authHash);
       if(!from.value || !to.value){
         setCurrentMonth();
       }
-      await fetchMetrics();
-      gate.style.display = "none";
+      const ok = await fetchMetrics();
+      if(ok){
+        pwdInput.value = "";
+        hideGate();
+      }
     }catch(e){
       errBox.textContent = `Ошибка загрузки: ${e.message}`;
     }finally{
@@ -241,6 +314,14 @@ function init(){
   bindDateListeners();
   bindPresetButtons();
   bindPasswordForm();
+  const stored = getStoredHash();
+  if(stored){
+    authHash = stored;
+    hideGate();
+    fetchMetrics();
+  }else{
+    showGate();
+  }
 }
 
 if(document.readyState === "loading"){
