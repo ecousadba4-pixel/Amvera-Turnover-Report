@@ -123,7 +123,9 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 function setPresetLabel(txt){
-  presetLabel.textContent = txt;
+  if(presetLabel){
+    presetLabel.textContent = txt;
+  }
 }
 
 function setActivePreset(btn){
