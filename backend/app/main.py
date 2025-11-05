@@ -24,7 +24,7 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
-        close_all_pools()
+        await close_all_pools()
 
 
 app = FastAPI(title="U4S Revenue API", version="1.0.0", lifespan=lifespan)
@@ -62,6 +62,12 @@ class ServiceItem(BaseModel):
     share: float
 
 
+class PaginationInfo(BaseModel):
+    page: int
+    page_size: int
+    total_items: int
+
+
 class ServicesResponse(BaseModel):
     used_field: str
     used_reason: str
@@ -69,6 +75,7 @@ class ServicesResponse(BaseModel):
     date_to: Optional[date]
     total_amount: float
     items: list[ServiceItem]
+    pagination: PaginationInfo
 
 
 @dataclass(frozen=True)
@@ -155,7 +162,7 @@ def _as_float(value: object) -> float:
 
 
 @app.get("/api/metrics", response_model=MetricsResponse)
-def metrics(
+async def metrics(
     _: str = Depends(require_admin_auth),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
@@ -201,9 +208,10 @@ def metrics(
     """
     ).format(filters=filters)
 
-    with get_conn(dsn) as conn, conn.cursor() as cur:
-        cur.execute(query, params)
-        row = cur.fetchone() or {}
+    async with get_conn(dsn) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, params)
+            row = await cur.fetchone() or {}
 
     count = int(row.get("bookings_count", 0))
     lvl2p = int(row.get("lvl2p", 0))
@@ -233,11 +241,13 @@ def metrics(
 
 
 @app.get("/api/services", response_model=ServicesResponse)
-def services(
+async def services(
     _: str = Depends(require_admin_auth),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     date_field: DateField = Query(default=DateField.created),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=1000),
 ) -> ServicesResponse:
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=422, detail="date_from must be before or equal to date_to")
@@ -246,23 +256,57 @@ def services(
     resolution = _resolve_date_field(date_field)
     filters, params = _build_filters(resolution, date_from, date_to, table_alias="g")
 
+    offset = (page - 1) * page_size
+
     query = sql.SQL(
         """
+      WITH aggregated AS (
+        SELECT
+          COALESCE(u.uslugi_type, 'Без категории') AS service_type,
+          COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
+        FROM uslugi AS u
+        JOIN guests AS g ON g.shelter_booking_id = u.shelter_booking_id
+        WHERE 1=1
+          {filters}
+        GROUP BY COALESCE(u.uslugi_type, 'Без категории')
+      )
       SELECT
-        COALESCE(u.uslugi_type, 'Без категории') AS service_type,
-        COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
-      FROM uslugi AS u
-      JOIN guests AS g ON g.shelter_booking_id = u.shelter_booking_id
-      WHERE 1=1
-        {filters}
-      GROUP BY COALESCE(u.uslugi_type, 'Без категории')
+        service_type,
+        total_amount
+      FROM aggregated
       ORDER BY total_amount DESC, service_type
+      LIMIT %(limit)s OFFSET %(offset)s
     """
     ).format(filters=filters)
 
-    with get_conn(dsn) as conn, conn.cursor() as cur:
-        cur.execute(query, params)
-        rows = cur.fetchall() or []
+    totals_query = sql.SQL(
+        """
+      WITH aggregated AS (
+        SELECT
+          COALESCE(u.uslugi_type, 'Без категории') AS service_type,
+          COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
+        FROM uslugi AS u
+        JOIN guests AS g ON g.shelter_booking_id = u.shelter_booking_id
+        WHERE 1=1
+          {filters}
+        GROUP BY COALESCE(u.uslugi_type, 'Без категории')
+      )
+      SELECT
+        COUNT(*)::int AS total_items,
+        COALESCE(SUM(total_amount), 0)::numeric AS overall_amount
+      FROM aggregated
+    """
+    ).format(filters=filters)
+
+    query_params = {**params, "limit": page_size, "offset": offset}
+
+    async with get_conn(dsn) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, query_params)
+            rows = await cur.fetchall() or []
+
+            await cur.execute(totals_query, params)
+            totals_row = await cur.fetchone() or {}
 
     raw_items = [
         {
@@ -272,7 +316,9 @@ def services(
         for row in rows
     ]
 
-    total_amount = sum(item["total_amount"] for item in raw_items)
+    total_items = int(totals_row.get("total_items", 0))
+    total_amount = _as_float(totals_row.get("overall_amount"))
+
     items = [
         ServiceItem(
             service_type=item["service_type"],
@@ -289,4 +335,9 @@ def services(
         date_to=date_to,
         total_amount=total_amount,
         items=items,
+        pagination=PaginationInfo(
+            page=page,
+            page_size=page_size,
+            total_items=total_items,
+        ),
     )
