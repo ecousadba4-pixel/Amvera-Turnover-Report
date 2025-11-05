@@ -379,7 +379,7 @@ h2 {
   visibility: hidden;
   transition: opacity 0.2s ease, visibility 0.2s ease;
   pointer-events: none;
-  z-index: 1000;
+  z-index: 4;
 }
 
 .loading-overlay .spinner {
@@ -580,7 +580,7 @@ body.is-loading .summary-value::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 5;
   padding: 24px;
 }
 
