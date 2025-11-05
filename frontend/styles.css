@@ -222,6 +222,42 @@ h2 {
   box-shadow: 0 10px 24px rgba(138, 157, 76, 0.25);
 }
 
+.section-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.section-switch__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: #fff;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.section-switch__btn:hover,
+.section-switch__btn:focus {
+  border-color: var(--brand-color);
+  color: var(--brand-dark);
+  outline: none;
+}
+
+.section-switch__btn.is-active {
+  background: linear-gradient(135deg, var(--brand-color), var(--brand-dark));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(138, 157, 76, 0.25);
+}
+
 /* === КНОПКИ === */
 .form-actions {
   display: flex;
@@ -349,6 +385,73 @@ h2 {
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.services-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.services-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.services-total {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.services-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.25rem 0;
+}
+
+.services-name {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+.services-amount {
+  flex: 0 0 auto;
+  min-width: 120px;
+  text-align: right;
+  font-weight: 600;
+}
+
+.services-share {
+  flex: 0 0 auto;
+  min-width: 56px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+.services-empty {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px dashed var(--border-soft);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.services-empty--error {
+  border-color: var(--status-error-border);
+  color: var(--status-error-text);
+  background: var(--status-error-bg);
 }
 
 /* === СОСТОЯНИЕ ЗАГРУЗКИ === */
@@ -489,6 +592,17 @@ body.is-loading .summary-value::after {
     border-radius: 12px;
   }
 
+  .section-switch {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .section-switch__btn {
+    flex: 1 1 calc(50% - 0.3rem);
+    padding: 0.55rem 0.9rem;
+    font-size: 0.9rem;
+  }
+
   .form-grid {
     gap: 0.75rem;
   }
@@ -536,6 +650,20 @@ body.is-loading .summary-value::after {
 
   .summary-label {
     font-size: 0.78rem;
+  }
+
+  .services-row {
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+  }
+
+  .services-amount,
+  .services-share {
+    min-width: auto;
+  }
+
+  .services-total {
+    font-size: 1rem;
   }
 }
 
