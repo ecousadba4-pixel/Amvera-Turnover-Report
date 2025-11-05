@@ -1,6 +1,11 @@
 // ======= Config =======
 const DEFAULT_API_BASE = "https://u4s-turnover-karinausadba.amvera.io";
-const DATE_FIELD = "created"; // 'created' | 'checkin'
+const DATE_FIELD_CREATED = "created";
+const DATE_FIELD_CHECKIN = "checkin";
+const SECTION_REVENUE = "revenue";
+const SECTION_SERVICES = "services";
+const DEFAULT_ACTIVE_SECTION = SECTION_REVENUE;
+const DATE_FIELD = DATE_FIELD_CREATED; // DATE_FIELD_CREATED | DATE_FIELD_CHECKIN
 
 function normalizeBase(url) {
   return url.replace(/\/+$/, "");
@@ -61,7 +66,7 @@ const FETCH_DEBOUNCE_DELAY = 600;
 
 function canUseSessionStorage() {
   try {
-    return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+    return Boolean(globalThis.sessionStorage);
   } catch (e) {
     return false;
   }
@@ -94,7 +99,7 @@ let revenueController = null;
 let servicesController = null;
 let loadingCounter = 0;
 let servicesDirty = true;
-let activeSection = "revenue";
+let activeSection = DEFAULT_ACTIVE_SECTION;
 
 function toNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -130,7 +135,7 @@ function scheduleRevenueFetch() {
 }
 
 function scheduleServicesFetch() {
-  if (activeSection !== "services") {
+  if (activeSection !== SECTION_SERVICES) {
     return;
   }
   cancelServicesFetch();
@@ -432,21 +437,24 @@ function bindFilterControls() {
     setActivePreset(presetButtons, null);
     servicesDirty = true;
     scheduleRevenueFetch();
-    if (activeSection === "services") {
+    if (activeSection === SECTION_SERVICES) {
       scheduleServicesFetch();
     }
   };
 
   ["change", "input"].forEach((evt) => {
-    rangeInputs.from.addEventListener(evt, handleManualChange);
-    rangeInputs.to.addEventListener(evt, handleManualChange);
+    Object.values(rangeInputs).forEach((input) => {
+      if (input) {
+        input.addEventListener(evt, handleManualChange);
+      }
+    });
   });
 
   const triggerImmediateFetch = () => {
     servicesDirty = true;
     cancelRevenueFetch();
     fetchRevenueMetrics();
-    if (activeSection === "services") {
+    if (activeSection === SECTION_SERVICES) {
       cancelServicesFetch();
       fetchServicesMetrics();
     }
@@ -478,14 +486,20 @@ function bindFilterControls() {
 }
 
 function applySection(section) {
-  const isRevenue = section === "revenue";
+  const isRevenue = section === SECTION_REVENUE;
   if (filterTitle) {
     filterTitle.textContent = "Дата выезда";
   }
   revenueSection.classList.toggle("hidden", !isRevenue);
   servicesSection.classList.toggle("hidden", isRevenue);
 
-  if (!isRevenue && authHash && servicesDirty && !servicesController && servicesFetchTimer === null) {
+  if (
+    !isRevenue &&
+    authHash &&
+    servicesDirty &&
+    !servicesController &&
+    servicesFetchTimer === null
+  ) {
     fetchServicesMetrics();
   }
 }
@@ -550,19 +564,25 @@ function bindPasswordForm() {
   });
 }
 
-function init() {
+function initializeFilters() {
   setRangeToCurrentMonth();
   setActivePreset(presetButtons, btnCurMonth);
+}
 
+function initializeEventHandlers() {
   bindFilterControls();
   bindSectionSwitch();
   bindPasswordForm();
+}
 
+function applyInitialSectionState() {
   applySection(activeSection);
   sectionButtons.forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.sectionTarget === activeSection);
   });
+}
 
+function restoreSessionFromStorage() {
   const stored = getStoredHash();
   if (stored) {
     authHash = stored;
@@ -572,6 +592,13 @@ function init() {
   } else {
     showGate();
   }
+}
+
+function init() {
+  initializeFilters();
+  initializeEventHandlers();
+  applyInitialSectionState();
+  restoreSessionFromStorage();
 }
 
 if (document.readyState === "loading") {
