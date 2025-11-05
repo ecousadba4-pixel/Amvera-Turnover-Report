@@ -30,14 +30,36 @@
             <input type="date" id="toDate" class="form-input" />
           </div>
         </div>
+        <div class="form-error" id="filterError" role="alert" aria-live="assertive" hidden></div>
       </div>
 
-      <div class="section-switch" role="tablist">
-        <button class="section-switch__btn is-active" type="button" data-section-target="revenue">Выручка</button>
-        <button class="section-switch__btn" type="button" data-section-target="services">Услуги</button>
+      <div class="section-switch" role="tablist" aria-label="Выбор раздела аналитики">
+        <button
+          class="section-switch__btn is-active"
+          type="button"
+          data-section-target="revenue"
+          id="tabRevenue"
+          role="tab"
+          aria-selected="true"
+          aria-controls="revenueSection"
+        >
+          Выручка
+        </button>
+        <button
+          class="section-switch__btn"
+          type="button"
+          data-section-target="services"
+          id="tabServices"
+          role="tab"
+          aria-selected="false"
+          aria-controls="servicesSection"
+          tabindex="-1"
+        >
+          Услуги
+        </button>
       </div>
 
-      <div class="info-summary" id="revenueSection">
+      <div class="info-summary" id="revenueSection" role="tabpanel" aria-labelledby="tabRevenue" aria-hidden="false">
         <div class="summary-card summary-card--revenue">
           <div class="summary-label">Выручка всего</div>
           <div class="summary-value" id="revenue">—</div>
@@ -76,7 +98,13 @@
         </div>
       </div>
 
-      <div class="card services-card hidden" id="servicesSection">
+      <div
+        class="card services-card hidden"
+        id="servicesSection"
+        role="tabpanel"
+        aria-labelledby="tabServices"
+        aria-hidden="true"
+      >
         <div class="services-total" id="servicesTotal">Итого: —</div>
         <div class="services-list" id="servicesList">
           <div class="services-empty">Выберите период, чтобы увидеть данные</div>

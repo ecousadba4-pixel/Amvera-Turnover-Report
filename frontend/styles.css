@@ -145,6 +145,16 @@ h2 {
   color: var(--text-primary);
 }
 
+.form-error {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--status-error-border);
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+  font-size: 0.9rem;
+}
+
 .form-input,
 .form-select {
   width: 100%;

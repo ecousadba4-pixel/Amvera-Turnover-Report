@@ -37,6 +37,7 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const filterTitle = $("#filterTitle");
 const fromDate = $("#fromDate");
 const toDate = $("#toDate");
+const filterError = $("#filterError");
 const revenueValue = $("#revenue");
 const avg = $("#avg");
 const count = $("#count");
@@ -63,6 +64,9 @@ const presetButtons = [btnCurMonth, btnPrevMonth];
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 const FETCH_DEBOUNCE_DELAY = 600;
+const HASH_SALT = "static_salt_here";
+
+const requestCache = new Map();
 
 function canUseSessionStorage() {
   try {
@@ -70,6 +74,18 @@ function canUseSessionStorage() {
   } catch (e) {
     return false;
   }
+}
+
+function showError(message) {
+  if (!filterError) {
+    return;
+  }
+  filterError.textContent = message || "";
+  filterError.hidden = !message;
+}
+
+function clearError() {
+  showError("");
 }
 
 const fmtRub = (v) =>
@@ -124,6 +140,64 @@ function cancelServicesFetch() {
     clearTimeout(servicesFetchTimer);
     servicesFetchTimer = null;
   }
+}
+
+function applyRevenueMetrics(data) {
+  if (!data) {
+    return;
+  }
+  revenueValue.textContent = fmtRub(toNumber(data.revenue));
+  avg.textContent = fmtRub(toNumber(data.avg_check));
+  count.textContent = String(data.bookings_count || 0);
+  share.textContent = fmtPct(toNumber(data.level2plus_share), 0);
+  minv.textContent = fmtRub(toNumber(data.min_booking));
+  maxv.textContent = fmtRub(toNumber(data.max_booking));
+  if (stay) {
+    const stayValue = toNumber(data.avg_stay_days);
+    stay.textContent = `${fmtNumber(stayValue, 1)} дн.`;
+  }
+  if (bonus) {
+    bonus.textContent = fmtPct(toNumber(data.bonus_payment_share), 1);
+  }
+  if (servicesShareValue) {
+    servicesShareValue.textContent = fmtPct(toNumber(data.services_share), 0);
+  }
+}
+
+function applyServicesMetrics(data) {
+  const total = toNumber(data && data.total_amount);
+  servicesTotal.textContent = total > 0 ? `Итого: ${fmtRub(total)}` : "Итого: —";
+
+  servicesList.innerHTML = "";
+  const items = Array.isArray(data && data.items) ? data.items : [];
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "services-empty";
+    empty.textContent = "Данных за выбранный период нет";
+    servicesList.append(empty);
+    return;
+  }
+
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "services-row";
+
+    const name = document.createElement("div");
+    name.className = "services-name";
+    name.textContent = item.service_type || "Без категории";
+
+    const amount = document.createElement("div");
+    amount.className = "services-amount";
+    amount.textContent = fmtRub(toNumber(item.total_amount));
+
+    const shareEl = document.createElement("div");
+    shareEl.className = "services-share";
+    const shareValue = Math.round(toNumber(item.share) * 100);
+    shareEl.textContent = `${shareValue}%`;
+
+    row.append(name, amount, shareEl);
+    servicesList.append(row);
+  });
 }
 
 function scheduleRevenueFetch() {
@@ -192,6 +266,7 @@ function showGate(message = "") {
   gate.style.display = "flex";
   errBox.textContent = message;
   setTimeout(() => pwdInput.focus(), 0);
+  clearError();
 }
 
 function hideGate() {
@@ -213,9 +288,29 @@ const rangeInputs = { from: fromDate, to: toDate };
 const pad2 = (n) => String(n).padStart(2, "0");
 const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+function getCacheKey(section, from, to) {
+  const fromSafe = from || "";
+  const toSafe = to || "";
+  return `${section}-${fromSafe}-${toSafe}-${DATE_FIELD}`;
+}
+
+function validateDateRange(from, to) {
+  if (from && to) {
+    if (new Date(from) > new Date(to)) {
+      showError("Дата 'От' не может быть позже даты 'До'");
+      return false;
+    }
+    clearError();
+    return true;
+  }
+  clearError();
+  return true;
+}
+
 function setDateRange(inputs, fromDate, toDate) {
   inputs.from.value = fmtYMD(fromDate);
   inputs.to.value = fmtYMD(toDate);
+  clearError();
 }
 
 function setCurrentMonthRange(inputs) {
@@ -242,7 +337,7 @@ function setRangeToLastMonth() {
 
 async function sha256Hex(str) {
   const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(str));
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${str}${HASH_SALT}`));
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -257,6 +352,19 @@ async function fetchRevenueMetrics() {
     return false;
   }
 
+  const fromValue = fromDate.value;
+  const toValue = toDate.value;
+  if (!validateDateRange(fromValue, toValue)) {
+    return false;
+  }
+
+  const cacheKey = getCacheKey(SECTION_REVENUE, fromValue, toValue);
+  const cached = requestCache.get(cacheKey);
+  if (cached) {
+    applyRevenueMetrics(cached);
+    return true;
+  }
+
   if (revenueController) {
     revenueController.abort();
   }
@@ -266,11 +374,11 @@ async function fetchRevenueMetrics() {
   setLoadingState(true);
 
   const params = new URLSearchParams();
-  if (fromDate.value) {
-    params.set("date_from", fromDate.value);
+  if (fromValue) {
+    params.set("date_from", fromValue);
   }
-  if (toDate.value) {
-    params.set("date_to", toDate.value);
+  if (toValue) {
+    params.set("date_to", toValue);
   }
   params.set("date_field", DATE_FIELD);
   const url = `${API_BASE}/api/metrics?${params.toString()}`;
@@ -284,6 +392,7 @@ async function fetchRevenueMetrics() {
     if (resp.status === 401 || resp.status === 403) {
       persistHash(null);
       authHash = null;
+      requestCache.clear();
       showGate("Неверный пароль или сессия истекла.");
       return false;
     }
@@ -293,24 +402,8 @@ async function fetchRevenueMetrics() {
     }
 
     const json = await resp.json();
-
-    revenueValue.textContent = fmtRub(toNumber(json.revenue));
-    avg.textContent = fmtRub(toNumber(json.avg_check));
-    count.textContent = String(json.bookings_count || 0);
-    share.textContent = fmtPct(toNumber(json.level2plus_share), 0);
-    minv.textContent = fmtRub(toNumber(json.min_booking));
-    maxv.textContent = fmtRub(toNumber(json.max_booking));
-    if (stay) {
-      const stayValue = toNumber(json.avg_stay_days);
-      stay.textContent = `${fmtNumber(stayValue, 1)} дн.`;
-    }
-    if (bonus) {
-      bonus.textContent = fmtPct(toNumber(json.bonus_payment_share), 1);
-    }
-    if (servicesShareValue) {
-      servicesShareValue.textContent = fmtPct(toNumber(json.services_share), 0);
-    }
-
+    applyRevenueMetrics(json);
+    requestCache.set(cacheKey, json);
     return true;
   } catch (e) {
     if (isAbortError(e)) {
@@ -338,6 +431,20 @@ async function fetchServicesMetrics() {
     return false;
   }
 
+  const fromValue = fromDate.value;
+  const toValue = toDate.value;
+  if (!validateDateRange(fromValue, toValue)) {
+    return false;
+  }
+
+  const cacheKey = getCacheKey(SECTION_SERVICES, fromValue, toValue);
+  const cached = requestCache.get(cacheKey);
+  if (cached) {
+    applyServicesMetrics(cached);
+    servicesDirty = false;
+    return true;
+  }
+
   if (servicesController) {
     servicesController.abort();
   }
@@ -347,11 +454,11 @@ async function fetchServicesMetrics() {
   setLoadingState(true);
 
   const params = new URLSearchParams();
-  if (fromDate.value) {
-    params.set("date_from", fromDate.value);
+  if (fromValue) {
+    params.set("date_from", fromValue);
   }
-  if (toDate.value) {
-    params.set("date_to", toDate.value);
+  if (toValue) {
+    params.set("date_to", toValue);
   }
   params.set("date_field", DATE_FIELD);
   const url = `${API_BASE}/api/services?${params.toString()}`;
@@ -366,6 +473,7 @@ async function fetchServicesMetrics() {
       persistHash(null);
       authHash = null;
       servicesDirty = true;
+      requestCache.clear();
       showGate("Неверный пароль или сессия истекла.");
       return false;
     }
@@ -375,38 +483,8 @@ async function fetchServicesMetrics() {
     }
 
     const data = await resp.json();
-    const total = toNumber(data.total_amount);
-    servicesTotal.textContent = total > 0 ? `Итого: ${fmtRub(total)}` : "Итого: —";
-
-    servicesList.innerHTML = "";
-    if (!Array.isArray(data.items) || data.items.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "services-empty";
-      empty.textContent = "Данных за выбранный период нет";
-      servicesList.append(empty);
-    } else {
-      data.items.forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "services-row";
-
-        const name = document.createElement("div");
-        name.className = "services-name";
-        name.textContent = item.service_type || "Без категории";
-
-        const amount = document.createElement("div");
-        amount.className = "services-amount";
-        amount.textContent = fmtRub(toNumber(item.total_amount));
-
-        const shareEl = document.createElement("div");
-        shareEl.className = "services-share";
-        const shareValue = Math.round(toNumber(item.share) * 100);
-        shareEl.textContent = `${shareValue}%`;
-
-        row.append(name, amount, shareEl);
-        servicesList.append(row);
-      });
-    }
-
+    applyServicesMetrics(data);
+    requestCache.set(cacheKey, data);
     servicesDirty = false;
     return true;
   } catch (e) {
@@ -436,6 +514,11 @@ function bindFilterControls() {
   const handleManualChange = () => {
     setActivePreset(presetButtons, null);
     servicesDirty = true;
+    if (!validateDateRange(fromDate.value, toDate.value)) {
+      cancelRevenueFetch();
+      cancelServicesFetch();
+      return;
+    }
     scheduleRevenueFetch();
     if (activeSection === SECTION_SERVICES) {
       scheduleServicesFetch();
@@ -452,6 +535,11 @@ function bindFilterControls() {
 
   const triggerImmediateFetch = () => {
     servicesDirty = true;
+    if (!validateDateRange(fromDate.value, toDate.value)) {
+      cancelRevenueFetch();
+      cancelServicesFetch();
+      return;
+    }
     cancelRevenueFetch();
     fetchRevenueMetrics();
     if (activeSection === SECTION_SERVICES) {
@@ -485,13 +573,25 @@ function bindFilterControls() {
   }
 }
 
+function setActiveSectionButton(section) {
+  sectionButtons.forEach((btn) => {
+    const isActive = btn.dataset.sectionTarget === section;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    btn.setAttribute("tabindex", isActive ? "0" : "-1");
+  });
+}
+
 function applySection(section) {
   const isRevenue = section === SECTION_REVENUE;
   if (filterTitle) {
     filterTitle.textContent = "Дата выезда";
   }
+  setActiveSectionButton(section);
   revenueSection.classList.toggle("hidden", !isRevenue);
   servicesSection.classList.toggle("hidden", isRevenue);
+  revenueSection.setAttribute("aria-hidden", (!isRevenue).toString());
+  servicesSection.setAttribute("aria-hidden", isRevenue.toString());
 
   if (
     !isRevenue &&
@@ -512,9 +612,6 @@ function bindSectionSwitch() {
         return;
       }
       activeSection = section;
-      sectionButtons.forEach((b) => {
-        b.classList.toggle("is-active", b.dataset.sectionTarget === section);
-      });
       applySection(section);
     });
   });
@@ -534,6 +631,7 @@ function bindPasswordForm() {
 
     try {
       authHash = await sha256Hex(pwd);
+      requestCache.clear();
       persistHash(authHash);
       if (!fromDate.value || !toDate.value) {
         setRangeToCurrentMonth();
@@ -577,15 +675,13 @@ function initializeEventHandlers() {
 
 function applyInitialSectionState() {
   applySection(activeSection);
-  sectionButtons.forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.sectionTarget === activeSection);
-  });
 }
 
 function restoreSessionFromStorage() {
   const stored = getStoredHash();
   if (stored) {
     authHash = stored;
+    requestCache.clear();
     hideGate();
     fetchRevenueMetrics();
     fetchServicesMetrics();
