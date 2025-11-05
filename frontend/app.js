@@ -43,12 +43,11 @@ const presetLabel = $("#presetLabel");
 const resetBtn = $("#resetBtn");
 const btnCur = $("#btnCur");
 const btnPrev = $("#btnPrev");
-const btnWknd = $("#btnWknd");
 const gate = $("#gate");
 const errBox = $("#err");
 const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
-const presetButtons = [btnCur, btnPrev, btnWknd];
+const presetButtons = [btnCur, btnPrev];
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 const FETCH_DEBOUNCE_DELAY = 600;
@@ -195,18 +194,6 @@ function setLastMonth(){
   setPresetLabel("Прошлый месяц");
 }
 
-function setLastWeekend(){
-  const now = new Date();
-  const day = now.getDay(); // 0 Sun .. 6 Sat
-  const sat = new Date(now);
-  sat.setDate(now.getDate() - (day === 6 ? 0 : day + 1));
-  const sun = new Date(sat);
-  sun.setDate(sat.getDate() + 1);
-  from.value = fmtYMD(sat);
-  to.value = fmtYMD(sun);
-  setPresetLabel("Последние выходные");
-}
-
 async function sha256Hex(str){
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(str));
@@ -322,13 +309,6 @@ function bindPresetButtons(){
   btnPrev.addEventListener("click", () => {
     setLastMonth();
     setActivePreset(btnPrev);
-    cancelScheduledFetch();
-    fetchMetrics();
-  });
-
-  btnWknd.addEventListener("click", () => {
-    setLastWeekend();
-    setActivePreset(btnWknd);
     cancelScheduledFetch();
     fetchMetrics();
   });
