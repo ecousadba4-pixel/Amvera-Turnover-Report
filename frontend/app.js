@@ -480,7 +480,7 @@ function bindFilterControls() {
 function applySection(section) {
   const isRevenue = section === "revenue";
   if (filterTitle) {
-    filterTitle.textContent = isRevenue ? "Фильтр по периоду выручки" : "Фильтр по периоду услуг";
+    filterTitle.textContent = "Дата выезда";
   }
   revenueSection.classList.toggle("hidden", !isRevenue);
   servicesSection.classList.toggle("hidden", isRevenue);
