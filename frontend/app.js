@@ -64,7 +64,6 @@ const presetButtons = [btnCurMonth, btnPrevMonth];
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 const FETCH_DEBOUNCE_DELAY = 600;
-const HASH_SALT = "static_salt_here";
 
 const requestCache = new Map();
 
@@ -337,7 +336,7 @@ function setRangeToLastMonth() {
 
 async function sha256Hex(str) {
   const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${str}${HASH_SALT}`));
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(str));
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
