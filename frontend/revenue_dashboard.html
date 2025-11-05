@@ -11,40 +11,23 @@
     <div class="dashboard">
       <div class="card filter-card" id="filterCard">
         <div class="card-header">
-          <div class="section-title" id="filterTitle">Фильтр по дате выезда</div>
-          <button class="link-button" id="resetRevenueBtn" type="button">Сбросить</button>
-          <button class="link-button hidden" id="resetServicesBtn" type="button">Сбросить</button>
+          <div class="section-title" id="filterTitle">Фильтр по периоду</div>
+          <button class="link-button" id="resetFiltersBtn" type="button">Сбросить</button>
         </div>
 
-        <div class="presetbar" id="revenuePresetBar">
-          <button class="preset-button is-active" id="btnRevenueCur" type="button">Текущий месяц</button>
-          <button class="preset-button" id="btnRevenuePrev" type="button">Прошлый месяц</button>
+        <div class="presetbar" id="datePresetBar">
+          <button class="preset-button is-active" id="btnCurMonth" type="button">Текущий месяц</button>
+          <button class="preset-button" id="btnPrevMonth" type="button">Прошлый месяц</button>
         </div>
 
-        <div class="presetbar hidden" id="servicesPresetBar">
-          <button class="preset-button is-active" id="btnServicesCur" type="button">Текущий месяц</button>
-          <button class="preset-button" id="btnServicesPrev" type="button">Прошлый месяц</button>
-        </div>
-
-        <div class="form-grid two-column" id="revenueDateInputs">
+        <div class="form-grid two-column" id="dateInputs">
           <div class="form-group">
-            <label for="fromRevenue">От</label>
-            <input type="date" id="fromRevenue" class="form-input" />
+            <label for="fromDate">От</label>
+            <input type="date" id="fromDate" class="form-input" />
           </div>
           <div class="form-group">
-            <label for="toRevenue">До</label>
-            <input type="date" id="toRevenue" class="form-input" />
-          </div>
-        </div>
-
-        <div class="form-grid two-column hidden" id="servicesDateInputs">
-          <div class="form-group">
-            <label for="fromServices">От</label>
-            <input type="date" id="fromServices" class="form-input" />
-          </div>
-          <div class="form-group">
-            <label for="toServices">До</label>
-            <input type="date" id="toServices" class="form-input" />
+            <label for="toDate">До</label>
+            <input type="date" id="toDate" class="form-input" />
           </div>
         </div>
       </div>
@@ -94,13 +77,7 @@
       </div>
 
       <div class="card services-card hidden" id="servicesSection">
-        <div class="services-header">
-          <div>
-            <div class="section-title">Структура услуг</div>
-            <div class="help-inline">Суммы по выбранному периоду</div>
-          </div>
-          <div class="services-total" id="servicesTotal">Итого: —</div>
-        </div>
+        <div class="services-total" id="servicesTotal">Итого: —</div>
         <div class="services-list" id="servicesList">
           <div class="services-empty">Выберите период, чтобы увидеть данные</div>
         </div>
