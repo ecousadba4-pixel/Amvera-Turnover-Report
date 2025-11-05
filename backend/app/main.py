@@ -55,6 +55,21 @@ class MetricsResponse(BaseModel):
 AuthHeader = Annotated[Optional[str], Header(alias="X-Auth-Hash", convert_underscores=False)]
 
 
+class ServiceItem(BaseModel):
+    service_type: str
+    total_amount: float
+    share: float
+
+
+class ServicesResponse(BaseModel):
+    used_field: str
+    used_reason: str
+    date_from: Optional[date]
+    date_to: Optional[date]
+    total_amount: float
+    items: list[ServiceItem]
+
+
 @dataclass(frozen=True)
 class DateFieldResolution:
     column: str
@@ -101,16 +116,24 @@ def _resolve_date_field(wanted: DateField) -> DateFieldResolution:
 def health():
     return {"ok": True, "env": settings.app_env}
 
-def _build_filters(resolution: DateFieldResolution, date_from: Optional[date], date_to: Optional[date]) -> tuple[str, dict[str, datetime]]:
+def _build_filters(
+    resolution: DateFieldResolution,
+    date_from: Optional[date],
+    date_to: Optional[date],
+    *,
+    table_alias: Optional[str] = None,
+) -> tuple[str, dict[str, datetime]]:
     clauses: list[str] = []
     params: dict[str, datetime] = {}
 
+    prefix = f"{table_alias}." if table_alias else ""
+
     if date_from:
-        clauses.append(f"AND {resolution.column} >= %(from)s")
+        clauses.append(f"AND {prefix}{resolution.column} >= %(from)s")
         params["from"] = datetime.combine(date_from, MIDNIGHT)
 
     if date_to:
-        clauses.append(f"AND {resolution.column} < %(to)s")
+        clauses.append(f"AND {prefix}{resolution.column} < %(to)s")
         params["to"] = datetime.combine(date_to + timedelta(days=1), MIDNIGHT)
 
     filters = "\n        ".join(clauses)
@@ -194,4 +217,62 @@ def metrics(
         avg_stay_days=avg_stay_days,
         bonus_payment_share=bonus_share,
         services_share=services_share,
+    )
+
+
+@app.get("/api/services", response_model=ServicesResponse)
+def services(
+    _: str = Depends(require_admin_auth),
+    date_from: Optional[date] = Query(default=None),
+    date_to: Optional[date] = Query(default=None),
+    date_field: DateField = Query(default=DateField.created),
+) -> ServicesResponse:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="date_from must be before or equal to date_to")
+
+    dsn = settings.database_url
+    resolution = _resolve_date_field(date_field)
+    filters, params = _build_filters(resolution, date_from, date_to, table_alias="g")
+
+    sql = f"""
+      SELECT
+        COALESCE(u.uslugi_type, 'Без категории') AS service_type,
+        COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
+      FROM uslugi AS u
+      JOIN guests AS g ON g.shelter_booking_id = u.shelter_booking_id
+      WHERE 1=1
+        {filters}
+      GROUP BY COALESCE(u.uslugi_type, 'Без категории')
+      ORDER BY total_amount DESC, service_type
+    """
+
+    with get_conn(dsn) as conn, conn.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall() or []
+
+    raw_items = [
+        {
+            "service_type": str(row.get("service_type") or "Без категории"),
+            "total_amount": _as_float(row.get("total_amount")),
+        }
+        for row in rows
+    ]
+
+    total_amount = sum(item["total_amount"] for item in raw_items)
+    items = [
+        ServiceItem(
+            service_type=item["service_type"],
+            total_amount=item["total_amount"],
+            share=float(item["total_amount"] / total_amount) if total_amount else 0.0,
+        )
+        for item in raw_items
+    ]
+
+    return ServicesResponse(
+        used_field=resolution.column,
+        used_reason=resolution.reason,
+        date_from=date_from,
+        date_to=date_to,
+        total_amount=total_amount,
+        items=items,
     )
