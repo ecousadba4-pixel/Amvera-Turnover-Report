@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.db import close_all_pools, get_conn
 from app.settings import get_settings
+from psycopg import sql
 
 settings = get_settings()
 ADMIN_HASH = settings.admin_password_sha256.lower()
@@ -122,21 +123,30 @@ def _build_filters(
     date_to: Optional[date],
     *,
     table_alias: Optional[str] = None,
-) -> tuple[str, dict[str, datetime]]:
-    clauses: list[str] = []
+) -> tuple[sql.Composable, dict[str, datetime]]:
+    clauses: list[sql.Composable] = []
     params: dict[str, datetime] = {}
 
-    prefix = f"{table_alias}." if table_alias else ""
+    if table_alias:
+        column_sql = sql.SQL("{}.{}").format(
+            sql.Identifier(table_alias), sql.Identifier(resolution.column)
+        )
+    else:
+        column_sql = sql.Identifier(resolution.column)
 
     if date_from:
-        clauses.append(f"AND {prefix}{resolution.column} >= %(from)s")
+        clauses.append(sql.SQL("AND {} >= %(from)s").format(column_sql))
         params["from"] = datetime.combine(date_from, MIDNIGHT)
 
     if date_to:
-        clauses.append(f"AND {prefix}{resolution.column} < %(to)s")
+        clauses.append(sql.SQL("AND {} < %(to)s").format(column_sql))
         params["to"] = datetime.combine(date_to + timedelta(days=1), MIDNIGHT)
 
-    filters = "\n        ".join(clauses)
+    if clauses:
+        filters = sql.SQL("\n          ").join(clauses)
+    else:
+        filters = sql.SQL("")
+
     return filters, params
 
 
@@ -158,7 +168,8 @@ def metrics(
     resolution = _resolve_date_field(date_field)
     filters, params = _build_filters(resolution, date_from, date_to)
 
-    sql = f"""
+    query = sql.SQL(
+        """
       WITH base AS (
         SELECT
           g.total_amount,
@@ -188,9 +199,10 @@ def metrics(
         COALESCE(SUM(services_total), 0)::numeric AS services_amount
       FROM base
     """
+    ).format(filters=filters)
 
     with get_conn(dsn) as conn, conn.cursor() as cur:
-        cur.execute(sql, params)
+        cur.execute(query, params)
         row = cur.fetchone() or {}
 
     count = int(row.get("bookings_count", 0))
@@ -234,7 +246,8 @@ def services(
     resolution = _resolve_date_field(date_field)
     filters, params = _build_filters(resolution, date_from, date_to, table_alias="g")
 
-    sql = f"""
+    query = sql.SQL(
+        """
       SELECT
         COALESCE(u.uslugi_type, 'Без категории') AS service_type,
         COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
@@ -245,9 +258,10 @@ def services(
       GROUP BY COALESCE(u.uslugi_type, 'Без категории')
       ORDER BY total_amount DESC, service_type
     """
+    ).format(filters=filters)
 
     with get_conn(dsn) as conn, conn.cursor() as cur:
-        cur.execute(sql, params)
+        cur.execute(query, params)
         rows = cur.fetchall() or []
 
     raw_items = [
