@@ -234,7 +234,7 @@ h2 {
   align-items: center;
   justify-content: center;
   padding: 0.6rem 1.4rem;
-  border-radius: 999px;
+  border-radius: 16px;
   border: 1px solid var(--border-soft);
   background: #fff;
   color: var(--text-primary);
@@ -592,6 +592,18 @@ body.is-loading .summary-value::after {
     border-radius: 12px;
   }
 
+  .filter-card {
+    padding: 1rem 1.05rem;
+  }
+
+  .filter-card .card-header {
+    margin-bottom: 0.8rem;
+  }
+
+  .filter-card .presetbar {
+    margin-bottom: 0.85rem;
+  }
+
   .section-switch {
     width: 100%;
     display: grid;
@@ -603,6 +615,7 @@ body.is-loading .summary-value::after {
     width: 100%;
     padding: 0.55rem 0.9rem;
     font-size: 0.9rem;
+    border-radius: 12px;
   }
 
   .form-grid {
