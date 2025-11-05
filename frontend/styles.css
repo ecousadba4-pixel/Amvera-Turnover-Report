@@ -289,7 +289,8 @@ h2 {
     'revenue bonus'
     'count   avg'
     'repeat  min'
-    'stay    max';
+    'stay    max'
+    'services services';
 }
 
 .summary-card {
@@ -331,6 +332,10 @@ h2 {
 
 .summary-card--bonus {
   grid-area: bonus;
+}
+
+.summary-card--services {
+  grid-area: services;
 }
 
 .summary-label {
@@ -519,7 +524,8 @@ body.is-loading .summary-value::after {
       'revenue bonus'
       'count   avg'
       'repeat  min'
-      'stay    max';
+      'stay    max'
+      'services services';
   }
 
   .summary-card {
@@ -543,7 +549,7 @@ body.is-loading .summary-value::after {
     grid-template-areas:
       'revenue count repeat'
       'avg min max'
-      'stay bonus bonus';
+      'stay bonus services';
   }
 }
 

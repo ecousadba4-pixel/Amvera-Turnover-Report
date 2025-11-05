@@ -37,6 +37,7 @@ const minv = $("#min");
 const maxv = $("#max");
 const stay = $("#stay");
 const bonus = $("#bonus");
+const servicesShare = $("#servicesShare");
 const refreshBtn = $("#refreshBtn");
 const presetLabel = $("#presetLabel");
 const resetBtn = $("#resetBtn");
@@ -267,6 +268,9 @@ async function fetchMetrics(){
     }
     if(bonus){
       bonus.textContent = fmtPct(toNumber(json.bonus_payment_share), 1);
+    }
+    if(servicesShare){
+      servicesShare.textContent = fmtPct(toNumber(json.services_share), 0);
     }
 
     return true;

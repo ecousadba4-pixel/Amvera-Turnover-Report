@@ -49,6 +49,7 @@ class MetricsResponse(BaseModel):
     max_booking: float
     avg_stay_days: float
     bonus_payment_share: float
+    services_share: float
 
 
 AuthHeader = Annotated[Optional[str], Header(alias="X-Auth-Hash", convert_underscores=False)]
@@ -135,18 +136,34 @@ def metrics(
     filters, params = _build_filters(resolution, date_from, date_to)
 
     sql = f"""
+      WITH base AS (
+        SELECT
+          g.total_amount,
+          g.loyalty_level,
+          g.created_at,
+          g.checkin_date,
+          g.bonus_spent,
+          COALESCE(u.services_total, 0)::numeric AS services_total
+        FROM guests AS g
+        LEFT JOIN (
+          SELECT shelter_booking_id, COALESCE(SUM(uslugi_amount), 0)::numeric AS services_total
+          FROM uslugi
+          GROUP BY shelter_booking_id
+        ) AS u ON u.shelter_booking_id = g.shelter_booking_id
+        WHERE 1=1
+          {filters}
+      )
       SELECT
-        COUNT(*)::int                                   AS bookings_count,
-        COALESCE(SUM(total_amount),0)::numeric          AS revenue,
-        COALESCE(MIN(total_amount),0)::numeric          AS min_booking,
-        COALESCE(MAX(total_amount),0)::numeric          AS max_booking,
-        COALESCE(AVG(total_amount),0)::numeric          AS avg_check,
-        COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END),0)::int AS lvl2p,
-        COALESCE(AVG((created_at::date - checkin_date)::numeric),0)::numeric AS avg_stay_days,
-        COALESCE(SUM(bonus_spent),0)::numeric           AS bonus_spent_sum
-      FROM guests
-      WHERE 1=1
-        {filters}
+        COUNT(*)::int AS bookings_count,
+        COALESCE(SUM(total_amount), 0)::numeric AS revenue,
+        COALESCE(MIN(total_amount), 0)::numeric AS min_booking,
+        COALESCE(MAX(total_amount), 0)::numeric AS max_booking,
+        COALESCE(AVG(total_amount), 0)::numeric AS avg_check,
+        COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END), 0)::int AS lvl2p,
+        COALESCE(AVG((created_at::date - checkin_date)::numeric), 0)::numeric AS avg_stay_days,
+        COALESCE(SUM(bonus_spent), 0)::numeric AS bonus_spent_sum,
+        COALESCE(SUM(services_total), 0)::numeric AS services_amount
+      FROM base
     """
 
     with get_conn(dsn) as conn, conn.cursor() as cur:
@@ -160,6 +177,8 @@ def metrics(
     bonus_spent_sum = _as_float(row.get("bonus_spent_sum"))
     revenue_total = _as_float(row.get("revenue"))
     bonus_share = float(bonus_spent_sum / revenue_total) if revenue_total else 0.0
+    services_amount = _as_float(row.get("services_amount"))
+    services_share = float(services_amount / revenue_total) if revenue_total else 0.0
 
     return MetricsResponse(
         used_field=resolution.column,
@@ -174,4 +193,5 @@ def metrics(
         max_booking=_as_float(row.get("max_booking")),
         avg_stay_days=avg_stay_days,
         bonus_payment_share=bonus_share,
+        services_share=services_share,
     )
