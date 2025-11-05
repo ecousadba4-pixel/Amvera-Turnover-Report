@@ -38,20 +38,10 @@ def get_conn(dsn: str) -> Iterator[psycopg.Connection]:
         yield conn
 
 
-def close_pool(dsn: str) -> None:
-    """Close and discard the cached pool for a specific DSN."""
-
-    with _pool_lock:
-        pool = _pools.pop(dsn, None)
-    if pool is not None:
-        pool.close()
-
-
 def close_all_pools() -> None:
     """Close and clear all cached connection pools."""
 
     with _pool_lock:
-        pools = list(_pools.values())
-        _pools.clear()
-    for pool in pools:
-        pool.close()
+        for dsn, pool in list(_pools.items()):
+            pool.close()
+            _pools.pop(dsn, None)
