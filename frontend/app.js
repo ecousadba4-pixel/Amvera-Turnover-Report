@@ -30,14 +30,8 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 const filterTitle = $("#filterTitle");
-const revenuePresetBar = $("#revenuePresetBar");
-const servicesPresetBar = $("#servicesPresetBar");
-const revenueFilterGroup = $("#revenueDateInputs");
-const servicesFilterGroup = $("#servicesDateInputs");
-const fromRevenue = $("#fromRevenue");
-const toRevenue = $("#toRevenue");
-const fromServices = $("#fromServices");
-const toServices = $("#toServices");
+const fromDate = $("#fromDate");
+const toDate = $("#toDate");
 const revenueValue = $("#revenue");
 const avg = $("#avg");
 const count = $("#count");
@@ -47,12 +41,9 @@ const maxv = $("#max");
 const stay = $("#stay");
 const bonus = $("#bonus");
 const servicesShareValue = $("#servicesShare");
-const resetRevenueBtn = $("#resetRevenueBtn");
-const resetServicesBtn = $("#resetServicesBtn");
-const btnRevenueCur = $("#btnRevenueCur");
-const btnRevenuePrev = $("#btnRevenuePrev");
-const btnServicesCur = $("#btnServicesCur");
-const btnServicesPrev = $("#btnServicesPrev");
+const resetFiltersBtn = $("#resetFiltersBtn");
+const btnCurMonth = $("#btnCurMonth");
+const btnPrevMonth = $("#btnPrevMonth");
 const sectionButtons = $$('[data-section-target]');
 const revenueSection = $("#revenueSection");
 const servicesSection = $("#servicesSection");
@@ -63,8 +54,7 @@ const errBox = $("#err");
 const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
 
-const revenuePresetButtons = [btnRevenueCur, btnRevenuePrev];
-const servicesPresetButtons = [btnServicesCur, btnServicesPrev];
+const presetButtons = [btnCurMonth, btnPrevMonth];
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 const FETCH_DEBOUNCE_DELAY = 600;
@@ -140,7 +130,9 @@ function scheduleRevenueFetch() {
 }
 
 function scheduleServicesFetch() {
-  servicesDirty = true;
+  if (activeSection !== "services") {
+    return;
+  }
   cancelServicesFetch();
   servicesFetchTimer = window.setTimeout(() => {
     servicesFetchTimer = null;
@@ -211,8 +203,7 @@ function setActivePreset(buttons, btn) {
   });
 }
 
-const revenueRangeInputs = { from: fromRevenue, to: toRevenue };
-const servicesRangeInputs = { from: fromServices, to: toServices };
+const rangeInputs = { from: fromDate, to: toDate };
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -236,20 +227,12 @@ function setLastMonthRange(inputs) {
   setDateRange(inputs, start, end);
 }
 
-function setRevenueCurrentMonth() {
-  setCurrentMonthRange(revenueRangeInputs);
+function setRangeToCurrentMonth() {
+  setCurrentMonthRange(rangeInputs);
 }
 
-function setRevenueLastMonth() {
-  setLastMonthRange(revenueRangeInputs);
-}
-
-function setServicesCurrentMonth() {
-  setCurrentMonthRange(servicesRangeInputs);
-}
-
-function setServicesLastMonth() {
-  setLastMonthRange(servicesRangeInputs);
+function setRangeToLastMonth() {
+  setLastMonthRange(rangeInputs);
 }
 
 async function sha256Hex(str) {
@@ -278,11 +261,11 @@ async function fetchRevenueMetrics() {
   setLoadingState(true);
 
   const params = new URLSearchParams();
-  if (fromRevenue.value) {
-    params.set("date_from", fromRevenue.value);
+  if (fromDate.value) {
+    params.set("date_from", fromDate.value);
   }
-  if (toRevenue.value) {
-    params.set("date_to", toRevenue.value);
+  if (toDate.value) {
+    params.set("date_to", toDate.value);
   }
   params.set("date_field", DATE_FIELD);
   const url = `${API_BASE}/api/metrics?${params.toString()}`;
@@ -359,11 +342,11 @@ async function fetchServicesMetrics() {
   setLoadingState(true);
 
   const params = new URLSearchParams();
-  if (fromServices.value) {
-    params.set("date_from", fromServices.value);
+  if (fromDate.value) {
+    params.set("date_from", fromDate.value);
   }
-  if (toServices.value) {
-    params.set("date_to", toServices.value);
+  if (toDate.value) {
+    params.set("date_to", toDate.value);
   }
   params.set("date_field", DATE_FIELD);
   const url = `${API_BASE}/api/services?${params.toString()}`;
@@ -444,102 +427,60 @@ async function fetchServicesMetrics() {
   }
 }
 
-function bindDateInputs(inputs, presetButtons, markDirty, scheduleFn) {
-  ["change", "input"].forEach((evt) => {
-    inputs.from.addEventListener(evt, () => {
-      setActivePreset(presetButtons, null);
-      markDirty();
-      scheduleFn();
-    });
-    inputs.to.addEventListener(evt, () => {
-      setActivePreset(presetButtons, null);
-      markDirty();
-      scheduleFn();
-    });
-  });
-}
-
-function bindRevenueControls() {
-  bindDateInputs(revenueRangeInputs, revenuePresetButtons, () => {}, scheduleRevenueFetch);
-
-  if (resetRevenueBtn) {
-    resetRevenueBtn.addEventListener("click", () => {
-      setRevenueCurrentMonth();
-      setActivePreset(revenuePresetButtons, btnRevenueCur);
-      cancelRevenueFetch();
-      fetchRevenueMetrics();
-    });
-  }
-
-  if (btnRevenueCur) {
-    btnRevenueCur.addEventListener("click", () => {
-      setRevenueCurrentMonth();
-      setActivePreset(revenuePresetButtons, btnRevenueCur);
-      cancelRevenueFetch();
-      fetchRevenueMetrics();
-    });
-  }
-
-  if (btnRevenuePrev) {
-    btnRevenuePrev.addEventListener("click", () => {
-      setRevenueLastMonth();
-      setActivePreset(revenuePresetButtons, btnRevenuePrev);
-      cancelRevenueFetch();
-      fetchRevenueMetrics();
-    });
-  }
-}
-
-function bindServicesControls() {
-  const markDirty = () => {
+function bindFilterControls() {
+  const handleManualChange = () => {
+    setActivePreset(presetButtons, null);
     servicesDirty = true;
+    scheduleRevenueFetch();
+    if (activeSection === "services") {
+      scheduleServicesFetch();
+    }
   };
 
-  bindDateInputs(servicesRangeInputs, servicesPresetButtons, markDirty, scheduleServicesFetch);
+  ["change", "input"].forEach((evt) => {
+    rangeInputs.from.addEventListener(evt, handleManualChange);
+    rangeInputs.to.addEventListener(evt, handleManualChange);
+  });
 
-  if (resetServicesBtn) {
-    resetServicesBtn.addEventListener("click", () => {
-      setServicesCurrentMonth();
-      setActivePreset(servicesPresetButtons, btnServicesCur);
-      servicesDirty = true;
+  const triggerImmediateFetch = () => {
+    servicesDirty = true;
+    cancelRevenueFetch();
+    fetchRevenueMetrics();
+    if (activeSection === "services") {
       cancelServicesFetch();
       fetchServicesMetrics();
+    }
+  };
+
+  if (resetFiltersBtn) {
+    resetFiltersBtn.addEventListener("click", () => {
+      setRangeToCurrentMonth();
+      setActivePreset(presetButtons, btnCurMonth);
+      triggerImmediateFetch();
     });
   }
 
-  if (btnServicesCur) {
-    btnServicesCur.addEventListener("click", () => {
-      setServicesCurrentMonth();
-      setActivePreset(servicesPresetButtons, btnServicesCur);
-      servicesDirty = true;
-      cancelServicesFetch();
-      fetchServicesMetrics();
+  if (btnCurMonth) {
+    btnCurMonth.addEventListener("click", () => {
+      setRangeToCurrentMonth();
+      setActivePreset(presetButtons, btnCurMonth);
+      triggerImmediateFetch();
     });
   }
 
-  if (btnServicesPrev) {
-    btnServicesPrev.addEventListener("click", () => {
-      setServicesLastMonth();
-      setActivePreset(servicesPresetButtons, btnServicesPrev);
-      servicesDirty = true;
-      cancelServicesFetch();
-      fetchServicesMetrics();
+  if (btnPrevMonth) {
+    btnPrevMonth.addEventListener("click", () => {
+      setRangeToLastMonth();
+      setActivePreset(presetButtons, btnPrevMonth);
+      triggerImmediateFetch();
     });
   }
 }
 
 function applySection(section) {
   const isRevenue = section === "revenue";
-  filterTitle.textContent = isRevenue ? "Фильтр по дате выезда" : "Фильтр по периоду услуг";
-  revenuePresetBar.classList.toggle("hidden", !isRevenue);
-  servicesPresetBar.classList.toggle("hidden", isRevenue);
-  revenueFilterGroup.classList.toggle("hidden", !isRevenue);
-  servicesFilterGroup.classList.toggle("hidden", isRevenue);
-  if (resetRevenueBtn) {
-    resetRevenueBtn.classList.toggle("hidden", !isRevenue);
-  }
-  if (resetServicesBtn) {
-    resetServicesBtn.classList.toggle("hidden", isRevenue);
+  if (filterTitle) {
+    filterTitle.textContent = isRevenue ? "Фильтр по периоду выручки" : "Фильтр по периоду услуг";
   }
   revenueSection.classList.toggle("hidden", !isRevenue);
   servicesSection.classList.toggle("hidden", isRevenue);
@@ -580,11 +521,8 @@ function bindPasswordForm() {
     try {
       authHash = await sha256Hex(pwd);
       persistHash(authHash);
-      if (!fromRevenue.value || !toRevenue.value) {
-        setRevenueCurrentMonth();
-      }
-      if (!fromServices.value || !toServices.value) {
-        setServicesCurrentMonth();
+      if (!fromDate.value || !toDate.value) {
+        setRangeToCurrentMonth();
       }
       cancelRevenueFetch();
       cancelServicesFetch();
@@ -613,13 +551,10 @@ function bindPasswordForm() {
 }
 
 function init() {
-  setRevenueCurrentMonth();
-  setServicesCurrentMonth();
-  setActivePreset(revenuePresetButtons, btnRevenueCur);
-  setActivePreset(servicesPresetButtons, btnServicesCur);
+  setRangeToCurrentMonth();
+  setActivePreset(presetButtons, btnCurMonth);
 
-  bindRevenueControls();
-  bindServicesControls();
+  bindFilterControls();
   bindSectionSwitch();
   bindPasswordForm();
 
