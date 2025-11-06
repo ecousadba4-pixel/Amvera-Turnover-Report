@@ -105,6 +105,7 @@ class MonthlyMetricsResponse(BaseModel):
     range: MonthlyRange
     date_field: str
     points: list[MonthlyMetricPoint]
+    aggregate: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -514,6 +515,20 @@ async def metrics_monthly(
 
     points: list[MonthlyMetricPoint] = []
 
+    revenue_sum = 0.0
+    bookings_sum = 0
+    bookings_with_data = 0
+    revenue_with_bookings_sum = 0.0
+    lvl2p_sum = 0
+    avg_stay_weighted_sum = 0.0
+    avg_stay_weight = 0
+    min_booking_value: Optional[float] = None
+    max_booking_value: Optional[float] = None
+    bonus_spent_sum_total = 0.0
+    bonus_revenue_total = 0.0
+    services_amount_total = 0.0
+    services_revenue_total = 0.0
+
     for row in rows:
         month_start = row.get("month_start")
         if not isinstance(month_start, date):
@@ -524,6 +539,37 @@ async def metrics_monthly(
         lvl2p = int(row.get("lvl2p", 0) or 0)
         bonus_spent_sum = _as_float(row.get("bonus_spent_sum"))
         services_amount = _as_float(row.get("services_amount"))
+        avg_stay_days_value = _as_float(row.get("avg_stay_days"))
+
+        revenue_sum += revenue
+        bookings_sum += bookings_count
+        if bookings_count > 0:
+            bookings_with_data += bookings_count
+            revenue_with_bookings_sum += revenue
+            lvl2p_sum += lvl2p
+            avg_stay_weighted_sum += avg_stay_days_value * bookings_count
+            avg_stay_weight += bookings_count
+
+            min_candidate = _as_float(row.get("min_booking"))
+            max_candidate = _as_float(row.get("max_booking"))
+
+            if min_candidate is not None:
+                if min_booking_value is None:
+                    min_booking_value = min_candidate
+                else:
+                    min_booking_value = min(min_booking_value, min_candidate)
+
+            if max_candidate is not None:
+                if max_booking_value is None:
+                    max_booking_value = max_candidate
+                else:
+                    max_booking_value = max(max_booking_value, max_candidate)
+
+        if revenue > 0:
+            bonus_spent_sum_total += bonus_spent_sum
+            bonus_revenue_total += revenue
+            services_amount_total += services_amount
+            services_revenue_total += revenue
 
         if metric is MonthlyMetric.revenue:
             value = revenue
@@ -553,9 +599,48 @@ async def metrics_monthly(
             )
         )
 
+    aggregate_value: Optional[float]
+
+    if metric is MonthlyMetric.revenue:
+        aggregate_value = revenue_sum
+    elif metric is MonthlyMetric.bookings_count:
+        aggregate_value = float(bookings_sum)
+    elif metric is MonthlyMetric.avg_check:
+        if bookings_with_data > 0:
+            aggregate_value = revenue_with_bookings_sum / bookings_with_data
+        else:
+            aggregate_value = 0.0 if points else None
+    elif metric is MonthlyMetric.level2plus_share:
+        if bookings_with_data > 0:
+            aggregate_value = float(lvl2p_sum / bookings_with_data)
+        else:
+            aggregate_value = 0.0 if points else None
+    elif metric is MonthlyMetric.min_booking:
+        aggregate_value = _as_float(min_booking_value) if min_booking_value is not None else (0.0 if points else None)
+    elif metric is MonthlyMetric.max_booking:
+        aggregate_value = _as_float(max_booking_value) if max_booking_value is not None else (0.0 if points else None)
+    elif metric is MonthlyMetric.avg_stay_days:
+        if avg_stay_weight > 0:
+            aggregate_value = avg_stay_weighted_sum / avg_stay_weight
+        else:
+            aggregate_value = 0.0 if points else None
+    elif metric is MonthlyMetric.bonus_payment_share:
+        if bonus_revenue_total > 0:
+            aggregate_value = float(bonus_spent_sum_total / bonus_revenue_total)
+        else:
+            aggregate_value = 0.0 if points else None
+    elif metric is MonthlyMetric.services_share:
+        if services_revenue_total > 0:
+            aggregate_value = float(services_amount_total / services_revenue_total)
+        else:
+            aggregate_value = 0.0 if points else None
+    else:
+        aggregate_value = None
+
     return MonthlyMetricsResponse(
         metric=metric,
         range=range_,
         date_field=resolution.column,
         points=points,
+        aggregate=aggregate_value,
     )
