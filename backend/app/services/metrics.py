@@ -24,7 +24,6 @@ from app.schemas.responses import (
     ServiceItem,
     ServicesResponse,
 )
-from app.settings import get_settings
 
 
 async def get_metrics(
@@ -32,11 +31,11 @@ async def get_metrics(
     date_from: Optional[date],
     date_to: Optional[date],
     date_field: DateField,
+    dsn: str,
 ) -> MetricsResponse:
     date_from, date_to = _normalize_date_range(date_from, date_to)
-    settings = get_settings()
     summary = await fetch_metrics_summary(
-        dsn=settings.database_url,
+        dsn=dsn,
         date_from=date_from,
         date_to=date_to,
         date_field=date_field,
@@ -69,11 +68,11 @@ async def get_services(
     date_to: Optional[date],
     page: int,
     page_size: int,
+    dsn: str,
 ) -> ServicesResponse:
     date_from, date_to = _normalize_date_range(date_from, date_to)
-    settings = get_settings()
     listing = await fetch_services_listing(
-        dsn=settings.database_url,
+        dsn=dsn,
         date_from=date_from,
         date_to=date_to,
         page=page,
@@ -101,10 +100,10 @@ async def get_monthly_metrics(
     metric: MonthlyMetric,
     range_: MonthlyRange,
     date_field: DateField,
+    dsn: str,
 ) -> MonthlyMetricsResponse:
-    settings = get_settings()
     rows = await fetch_monthly_metric_rows(
-        dsn=settings.database_url,
+        dsn=dsn,
         range_=range_,
         date_field=date_field,
     )
@@ -137,14 +136,14 @@ async def get_monthly_services(
     *,
     service_type: str,
     range_: MonthlyRange,
+    dsn: str,
 ) -> MonthlyServiceResponse:
     normalized_service = service_type.strip()
     if not normalized_service:
         raise ValueError("service_type must be provided")
 
-    settings = get_settings()
     rows = await fetch_monthly_service_rows(
-        dsn=settings.database_url,
+        dsn=dsn,
         service_type=normalized_service,
         range_=range_,
     )

@@ -7,7 +7,16 @@ from fastapi import Depends, Header, HTTPException, status
 
 from app.core.security import TokenPayload
 from app.services.auth import AdminAuthError, AdminTokenService
-from app.settings import get_settings
+from app.settings import Settings, get_settings
+
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def get_database_dsn(settings: SettingsDep) -> str:
+    return settings.database_url
+
+
+DatabaseDsn = Annotated[str, Depends(get_database_dsn)]
 
 AuthHeader = Annotated[
     Optional[str], Header(alias="Authorization", convert_underscores=False)
@@ -69,6 +78,9 @@ def require_admin_auth(
 
 
 __all__ = [
+    "SettingsDep",
+    "get_database_dsn",
+    "DatabaseDsn",
     "AuthHeader",
     "require_admin_auth",
 ]

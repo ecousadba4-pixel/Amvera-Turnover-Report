@@ -3,16 +3,15 @@ from __future__ import annotations
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
+from app.api.dependencies import DatabaseDsn, SettingsDep
 from app.db.health import check_database
-from app.settings import get_settings
 
 router = APIRouter()
 
 
 @router.get("/health")
-async def health() -> JSONResponse:
-    settings = get_settings()
-    db_ok, db_error = await check_database(settings.database_url)
+async def health(settings: SettingsDep, dsn: DatabaseDsn) -> JSONResponse:
+    db_ok, db_error = await check_database(dsn)
 
     payload: dict[str, object] = {
         "ok": db_ok,

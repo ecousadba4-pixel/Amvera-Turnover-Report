@@ -6,8 +6,8 @@ import hmac
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+from app.api.dependencies import SettingsDep
 from app.core.security import create_access_token
-from app.settings import get_settings
 
 
 class LoginRequest(BaseModel):
@@ -24,8 +24,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(payload: LoginRequest) -> LoginResponse:
-    settings = get_settings()
+async def login(payload: LoginRequest, settings: SettingsDep) -> LoginResponse:
 
     password = (payload.password or "").strip()
     if not password:
