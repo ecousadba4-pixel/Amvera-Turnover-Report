@@ -1099,3 +1099,22 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+
+// === Автоматическая подстройка высоты iframe при изменении содержимого ===
+function sendHeight() {
+  try {
+    const height = document.documentElement.scrollHeight;
+    // Отправляем высоту родителю (Flexbe)
+    window.parent.postMessage({ type: 'resize', height }, '*');
+  } catch (err) {
+    console.warn('Resize postMessage failed:', err);
+  }
+}
+
+// Отправляем высоту после загрузки и при изменениях DOM
+window.addEventListener('load', sendHeight);
+window.addEventListener('resize', sendHeight);
+new MutationObserver(sendHeight).observe(document.body, { childList: true, subtree: true });
+
+// На всякий случай — повторно через 1 секунду (для динамических графиков/загрузок)
+setTimeout(sendHeight, 1000);
