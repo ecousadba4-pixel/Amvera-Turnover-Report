@@ -1305,6 +1305,23 @@ const lastTriggeredRange = { from: null, to: null };
 const pad2 = (n) => String(n).padStart(2, "0");
 const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+function getCurrentMonthEndDate() {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  end.setHours(0, 0, 0, 0);
+  return end;
+}
+
+function applyCurrentMonthDateLimits(inputs) {
+  const monthEnd = getCurrentMonthEndDate();
+  const maxValue = fmtYMD(monthEnd);
+  Object.values(inputs).forEach((input) => {
+    if (input) {
+      input.setAttribute("max", maxValue);
+    }
+  });
+}
+
 function getCacheKey(section, from, to) {
   const fromSafe = from || "";
   const toSafe = to || "";
@@ -1338,8 +1355,7 @@ function normalizeDate(value) {
 }
 
 function validateDateRange(from, to) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const monthEnd = getCurrentMonthEndDate();
 
   const fromDate = normalizeDate(from);
   const toDate = normalizeDate(to);
@@ -1354,13 +1370,13 @@ function validateDateRange(from, to) {
     return false;
   }
 
-  if (fromDate && fromDate > today) {
-    showError("Дата 'От' не может быть в будущем");
+  if (fromDate && fromDate > monthEnd) {
+    showError("Дата 'От' не может быть позже конца текущего месяца");
     return false;
   }
 
-  if (toDate && toDate > today) {
-    showError("Дата 'До' не может быть в будущем");
+  if (toDate && toDate > monthEnd) {
+    showError("Дата 'До' не может быть позже конца текущего месяца");
     return false;
   }
 
@@ -1382,7 +1398,7 @@ function setDateRange(inputs, fromDate, toDate) {
 function setCurrentMonthRange(inputs) {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const end = getCurrentMonthEndDate();
   setDateRange(inputs, start, end);
 }
 
@@ -1770,6 +1786,7 @@ function bindPasswordForm() {
 }
 
 function initializeFilters() {
+  applyCurrentMonthDateLimits(rangeInputs);
   setRangeToCurrentMonth();
   setActivePreset(presetButtons, btnCurMonth);
 }
