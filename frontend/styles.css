@@ -366,7 +366,6 @@ h2 {
   padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   min-height: 100%;
   justify-content: space-between;
 }
@@ -412,9 +411,8 @@ h2 {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  min-height: 2.6rem;
-  display: flex;
-  align-items: flex-end;
+  display: block;
+  margin-bottom: 0.35rem;
 }
 
 .summary-value {
@@ -422,6 +420,10 @@ h2 {
   font-weight: 700;
   color: var(--text-primary);
   margin-top: auto;
+}
+
+.summary-card--revenue .summary-value {
+  white-space: nowrap;
 }
 
 .services-card {
@@ -696,7 +698,6 @@ body.is-loading .summary-value::after {
 
   .summary-card {
     padding: 0.7rem 0.8rem;
-    gap: 0.2rem;
     border-radius: 12px;
   }
 
@@ -706,7 +707,7 @@ body.is-loading .summary-value::after {
 
   .summary-label {
     font-size: 0.78rem;
-    min-height: 2.2rem;
+    margin-bottom: 0.25rem;
   }
 
   .services-row {
@@ -738,7 +739,7 @@ body.is-loading .summary-value::after {
   .dashboard {
     display: grid;
     grid-template-columns: minmax(320px, 360px) 1fr;
-    grid-auto-rows: minmax(0, auto);
+    grid-template-rows: 1fr auto;
     column-gap: 32px;
     row-gap: 24px;
     align-items: stretch;
@@ -750,12 +751,16 @@ body.is-loading .summary-value::after {
     height: 100%;
     display: flex;
     flex-direction: column;
+    align-self: stretch;
   }
 
   .analytics-card {
     grid-column: 2;
     grid-row: 1;
     height: 100%;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
   }
 
   .services-card {
