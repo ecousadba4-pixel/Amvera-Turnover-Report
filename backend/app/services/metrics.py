@@ -211,7 +211,7 @@ def _resolve_monthly_value(metric: MonthlyMetric, record: MonthlyMetricRecord) -
     return 0.0
 
 
-@dataclass
+@dataclass(slots=True)
 class MonthlyAggregation:
     revenue_sum: float = 0.0
     bookings_sum: int = 0

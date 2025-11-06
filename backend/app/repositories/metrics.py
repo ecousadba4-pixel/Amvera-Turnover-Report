@@ -20,7 +20,7 @@ from app.db.query_loader import load_query
 from app.schemas.enums import DateField, MonthlyRange
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MetricsSummaryRecord:
     bookings_count: int
     lvl2p: int
@@ -33,20 +33,20 @@ class MetricsSummaryRecord:
     services_amount: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServiceUsageRecord:
     service_type: str
     total_amount: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServicesListingResult:
     items: Sequence[ServiceUsageRecord]
     total_items: int
     total_amount: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MonthlyMetricRecord:
     month: date
     revenue: float
@@ -60,7 +60,7 @@ class MonthlyMetricRecord:
     services_amount: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MonthlyServiceRecord:
     month: date
     total_amount: float
@@ -71,6 +71,15 @@ def _as_int(value: object) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _as_optional_float(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _coerce_date(value: object) -> Optional[date]:
@@ -206,8 +215,8 @@ async def fetch_monthly_metric_rows(
                 revenue=as_float(row.get("revenue")),
                 bookings_count=_as_int(row.get("bookings_count")),
                 lvl2p=_as_int(row.get("lvl2p")),
-                min_booking=as_float(row.get("min_booking")),
-                max_booking=as_float(row.get("max_booking")),
+                min_booking=_as_optional_float(row.get("min_booking")),
+                max_booking=_as_optional_float(row.get("max_booking")),
                 avg_check=as_float(row.get("avg_check")),
                 avg_stay_days=as_float(row.get("avg_stay_days")),
                 bonus_spent_sum=as_float(row.get("bonus_spent_sum")),

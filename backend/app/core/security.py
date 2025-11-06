@@ -23,7 +23,7 @@ class TokenError(ValueError):
     """Общее исключение для ошибок валидации токена."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TokenPayload:
     subject: str
     issued_at: int
