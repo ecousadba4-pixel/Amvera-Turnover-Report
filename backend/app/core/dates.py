@@ -11,7 +11,7 @@ from app.schemas.enums import DateField, MonthlyRange
 MIDNIGHT = time(hour=0, minute=0)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DateFieldResolution:
     column: str
     reason: str

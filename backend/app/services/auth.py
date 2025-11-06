@@ -13,7 +13,7 @@ class AdminAuthError(Exception):
     """Базовое исключение для ошибок проверки административного доступа."""
 
 
-@dataclass
+@dataclass(slots=True)
 class AdminTokenService:
     """Централизованный сервис для проверки и выпуска административных токенов."""
 
