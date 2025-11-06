@@ -9,14 +9,16 @@ from fastapi import Header, HTTPException, status
 from app.core.security import TokenError, TokenPayload, verify_access_token
 from app.settings import get_settings
 
-AuthHeader = Annotated[Optional[str], Header(alias="Authorization", convert_underscores=False)]
+AuthHeader = Annotated[
+    Optional[str], Header(alias="Authorization", convert_underscores=False)
+]
 LegacyHashHeader = Annotated[
     Optional[str], Header(alias="X-Auth-Hash", convert_underscores=False)
 ]
 
 
 def require_admin_auth(
-    authorization: AuthHeader, legacy_auth_hash: LegacyHashHeader = None
+    authorization: AuthHeader = None, legacy_auth_hash: LegacyHashHeader = None
 ) -> TokenPayload:
     settings = get_settings()
 
