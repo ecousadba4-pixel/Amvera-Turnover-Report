@@ -754,6 +754,14 @@ body.is-loading .summary-value::after {
     align-self: stretch;
   }
 
+  .dashboard.dashboard--single {
+    grid-template-rows: 1fr;
+  }
+
+  .dashboard.dashboard--single .filter-card {
+    grid-row: 1;
+  }
+
   .analytics-card {
     grid-column: 2;
     grid-row: 1;

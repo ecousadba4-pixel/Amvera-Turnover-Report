@@ -34,6 +34,7 @@ const API_BASE = resolveApiBase();
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+const dashboard = $(".dashboard");
 const filterTitle = $("#filterTitle");
 const fromDate = $("#fromDate");
 const toDate = $("#toDate");
@@ -667,6 +668,9 @@ function applySection(section) {
   servicesSection.classList.toggle("hidden", isRevenue);
   revenueSection.setAttribute("aria-hidden", (!isRevenue).toString());
   servicesSection.setAttribute("aria-hidden", isRevenue.toString());
+  if (dashboard) {
+    dashboard.classList.toggle("dashboard--single", isRevenue);
+  }
 
   if (
     !isRevenue &&
