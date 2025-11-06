@@ -590,6 +590,37 @@ h2 {
   font-weight: 600;
 }
 
+.services-name--link {
+  cursor: pointer;
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
+.services-name--link:hover,
+.services-name--link:focus {
+  text-decoration: none;
+}
+
+.services-name--link:focus-visible {
+  outline: 2px solid var(--brand-dark);
+  outline-offset: 2px;
+}
+
+.services-row.is-active {
+  background: rgba(138, 157, 76, 0.12);
+  border-radius: 12px;
+  padding: 0.35rem 0.5rem;
+}
+
+.services-row.is-active .services-name {
+  color: var(--brand-dark);
+}
+
+.services-row.is-active .services-amount,
+.services-row.is-active .services-share {
+  font-weight: 700;
+}
+
 .services-amount {
   flex: 0 0 auto;
   min-width: 120px;

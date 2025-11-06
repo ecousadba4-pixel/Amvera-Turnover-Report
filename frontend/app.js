@@ -79,6 +79,8 @@ const MONTHLY_RANGE_LAST_12 = "last_12_months";
 const MONTHLY_RANGE_DEFAULT = MONTHLY_RANGE_THIS_YEAR;
 const MONTHLY_INITIAL_MESSAGE = "Выберите показатель, чтобы увидеть динамику";
 const MONTHLY_DEFAULT_TITLE = "Помесячная динамика";
+const MONTHLY_CONTEXT_METRIC = "metric";
+const MONTHLY_CONTEXT_SERVICE = "service";
 
 const requestCache = new Map();
 const REQUEST_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -218,6 +220,9 @@ let activeSection = DEFAULT_ACTIVE_SECTION;
 let activeSummaryCard = null;
 let activeMonthlyMetric = null;
 let activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
+let activeMonthlyContext = null;
+let activeMonthlyService = null;
+let activeServiceRow = null;
 
 function toNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -241,6 +246,16 @@ function cancelServicesFetch() {
   if (servicesFetchTimer !== null) {
     clearTimeout(servicesFetchTimer);
     servicesFetchTimer = null;
+  }
+}
+
+function setActiveServiceRow(row) {
+  if (activeServiceRow && activeServiceRow !== row) {
+    activeServiceRow.classList.remove("is-active");
+  }
+  activeServiceRow = row || null;
+  if (activeServiceRow) {
+    activeServiceRow.classList.add("is-active");
   }
 }
 
@@ -277,18 +292,41 @@ function applyServicesMetrics(data) {
     empty.className = "services-empty";
     empty.textContent = "Данных за выбранный период нет";
     servicesList.append(empty);
+    setActiveServiceRow(null);
+    if (activeMonthlyContext === MONTHLY_CONTEXT_SERVICE) {
+      resetMonthlyDetails();
+    }
     return;
   }
 
   const fragment = document.createDocumentFragment();
+  const activeServiceType =
+    activeMonthlyContext === MONTHLY_CONTEXT_SERVICE ? activeMonthlyService : null;
+  let nextActiveRow = null;
 
   items.forEach((item) => {
     const row = document.createElement("div");
     row.className = "services-row";
+    const serviceType = (item.service_type || "Без категории").trim();
+    row.dataset.serviceType = serviceType;
 
     const name = document.createElement("div");
-    name.className = "services-name";
-    name.textContent = item.service_type || "Без категории";
+    name.className = "services-name services-name--link";
+    name.textContent = serviceType;
+    name.setAttribute("role", "button");
+    name.setAttribute("tabindex", "0");
+    name.dataset.serviceType = serviceType;
+
+    const activate = () => {
+      handleServiceNameClick(row, serviceType);
+    };
+    name.addEventListener("click", activate);
+    name.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter" || evt.key === " ") {
+        evt.preventDefault();
+        activate();
+      }
+    });
 
     const amount = document.createElement("div");
     amount.className = "services-amount";
@@ -301,9 +339,21 @@ function applyServicesMetrics(data) {
 
     row.append(name, amount, shareEl);
     fragment.append(row);
+
+    if (activeServiceType && serviceType === activeServiceType) {
+      nextActiveRow = row;
+    }
   });
 
   servicesList.append(fragment);
+
+  if (activeServiceType) {
+    if (nextActiveRow) {
+      setActiveServiceRow(nextActiveRow);
+    } else {
+      resetMonthlyDetails();
+    }
+  }
 }
 
 function formatMonthLabel(isoDate) {
@@ -394,19 +444,13 @@ function clearMonthlyRows() {
   }
 }
 
-function renderMonthlyMetrics(metric, payload) {
-  if (!payload || metric !== activeMonthlyMetric) {
-    return;
-  }
-  if (payload.range && payload.range !== activeMonthlyRange) {
-    return;
-  }
+function renderMonthlySeries(points, aggregateValue, formatValue) {
   if (!monthlyTable || !monthlyEmpty || !monthlyRows) {
     return;
   }
 
-  const points = Array.isArray(payload.points) ? payload.points : [];
-  if (points.length === 0) {
+  const safePoints = Array.isArray(points) ? points.slice() : [];
+  if (safePoints.length === 0) {
     showMonthlyMessage("Данных за выбранный период нет");
     return;
   }
@@ -417,9 +461,9 @@ function renderMonthlyMetrics(metric, payload) {
 
   const fragment = document.createDocumentFragment();
 
-  const sortedPoints = points
-    .slice()
-    .sort((a, b) => new Date(b.month) - new Date(a.month));
+  const sortedPoints = safePoints.sort(
+    (a, b) => new Date(b.month) - new Date(a.month)
+  );
 
   sortedPoints.forEach((point) => {
     const row = document.createElement("div");
@@ -431,17 +475,12 @@ function renderMonthlyMetrics(metric, payload) {
 
     const valueEl = document.createElement("div");
     valueEl.className = "monthly-row__value";
-    valueEl.textContent = formatMonthlyValue(metric, point.value);
+    const numericValue = toNumber(point && point.value);
+    valueEl.textContent = formatValue(numericValue);
 
     row.append(monthEl, valueEl);
     fragment.append(row);
   });
-
-  const hasAggregate =
-    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate");
-  const aggregateValue = hasAggregate
-    ? payload.aggregate
-    : calculateMonthlyAggregate(metric, sortedPoints);
 
   if (aggregateValue !== null && aggregateValue !== undefined) {
     const totalRow = document.createElement("div");
@@ -453,13 +492,59 @@ function renderMonthlyMetrics(metric, payload) {
 
     const totalValue = document.createElement("div");
     totalValue.className = "monthly-row__value monthly-row__value--total";
-    totalValue.textContent = formatMonthlyValue(metric, aggregateValue);
+    totalValue.textContent = formatValue(toNumber(aggregateValue));
 
     totalRow.append(totalLabel, totalValue);
     fragment.append(totalRow);
   }
 
   monthlyRows.append(fragment);
+}
+
+function renderMonthlyMetrics(metric, payload) {
+  if (
+    !payload ||
+    metric !== activeMonthlyMetric ||
+    activeMonthlyContext !== MONTHLY_CONTEXT_METRIC
+  ) {
+    return;
+  }
+  if (payload.range && payload.range !== activeMonthlyRange) {
+    return;
+  }
+
+  const points = Array.isArray(payload.points) ? payload.points : [];
+  const hasAggregate =
+    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate");
+  const aggregateValue = hasAggregate
+    ? payload.aggregate
+    : calculateMonthlyAggregate(metric, points);
+
+  renderMonthlySeries(points, aggregateValue, (value) =>
+    formatMonthlyValue(metric, value)
+  );
+}
+
+function renderMonthlyService(serviceType, payload) {
+  if (
+    !payload ||
+    activeMonthlyContext !== MONTHLY_CONTEXT_SERVICE ||
+    serviceType !== activeMonthlyService
+  ) {
+    return;
+  }
+  if (payload.range && payload.range !== activeMonthlyRange) {
+    return;
+  }
+
+  const points = Array.isArray(payload.points) ? payload.points : [];
+  const hasAggregate =
+    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate");
+  const aggregateValue = hasAggregate
+    ? payload.aggregate
+    : points.reduce((acc, point) => acc + toNumber(point && point.value), 0);
+
+  renderMonthlySeries(points, aggregateValue, (value) => fmtRub(value));
 }
 
 async function loadMonthlyMetric(metric, range) {
@@ -527,6 +612,75 @@ async function loadMonthlyMetric(metric, range) {
   }
 }
 
+async function loadMonthlyService(serviceType, range) {
+  if (!authHash) {
+    return false;
+  }
+  if (!API_BASE) {
+    console.error("Базовый URL API не сконфигурирован");
+    return false;
+  }
+
+  const normalizedService = (serviceType || "").trim();
+  if (!normalizedService) {
+    return false;
+  }
+
+  const cacheKey = getMonthlyServiceCacheKey(normalizedService, range);
+  const cached = getCachedResponse(cacheKey);
+  if (cached) {
+    renderMonthlyService(normalizedService, cached);
+    return true;
+  }
+
+  abortSectionController(SECTION_MONTHLY);
+
+  const controller = new AbortController();
+  setSectionController(SECTION_MONTHLY, controller);
+  setLoadingState(true);
+
+  const params = new URLSearchParams({
+    service_type: normalizedService,
+    range,
+  });
+
+  const url = `${API_BASE}/api/services/monthly?${params.toString()}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { "X-Auth-Hash": authHash },
+      signal: controller.signal,
+    });
+
+    if (resp.status === 401 || resp.status === 403) {
+      handleAuthFailure("Неверный пароль или сессия истекла.");
+      showMonthlyMessage("Для просмотра требуется авторизация");
+      return false;
+    }
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    setCachedResponse(cacheKey, data);
+    renderMonthlyService(normalizedService, data);
+    return true;
+  } catch (e) {
+    if (isAbortError(e)) {
+      return false;
+    }
+    console.error("Ошибка загрузки помесячных данных по услугам", e);
+    showMonthlyMessage(`Ошибка загрузки данных: ${e.message}`);
+    return false;
+  } finally {
+    if (getSectionController(SECTION_MONTHLY) === controller) {
+      setSectionController(SECTION_MONTHLY, null);
+      setLoadingState(false);
+    }
+  }
+}
+
 function setActiveMonthlyRangeButton(range) {
   monthlyRangeButtons.forEach((btn) => {
     if (!btn) {
@@ -541,9 +695,12 @@ function setActiveMonthlyRangeButton(range) {
 function resetMonthlyDetails() {
   activeSummaryCard = null;
   activeMonthlyMetric = null;
+  activeMonthlyService = null;
+  activeMonthlyContext = null;
   activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
   setActiveMonthlyRangeButton(activeMonthlyRange);
   summaryCards.forEach((card) => card.classList.remove("is-active"));
+  setActiveServiceRow(null);
   clearMonthlyRows();
   showMonthlyMessage(MONTHLY_INITIAL_MESSAGE);
   if (monthlyCard) {
@@ -570,10 +727,13 @@ function handleSummaryCardClick(card, metric) {
     return;
   }
 
+  activeMonthlyContext = MONTHLY_CONTEXT_METRIC;
+  activeMonthlyService = null;
   activeSummaryCard = card;
   summaryCards.forEach((item) => {
     item.classList.toggle("is-active", item === card);
   });
+  setActiveServiceRow(null);
 
   activeMonthlyMetric = metric;
   activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
@@ -589,6 +749,49 @@ function handleSummaryCardClick(card, metric) {
   showMonthlyMessage("Загрузка...");
   clearMonthlyRows();
   loadMonthlyMetric(metric, activeMonthlyRange);
+}
+
+function handleServiceNameClick(row, serviceType) {
+  const normalizedService = (serviceType || "").trim();
+  if (!normalizedService) {
+    return;
+  }
+
+  if (
+    activeMonthlyContext === MONTHLY_CONTEXT_SERVICE &&
+    activeServiceRow === row &&
+    monthlyCard &&
+    !monthlyCard.classList.contains("hidden")
+  ) {
+    resetMonthlyDetails();
+    return;
+  }
+
+  if (!authHash) {
+    showGate();
+    return;
+  }
+
+  activeMonthlyContext = MONTHLY_CONTEXT_SERVICE;
+  activeMonthlyService = normalizedService;
+  activeMonthlyMetric = null;
+  activeSummaryCard = null;
+  summaryCards.forEach((card) => card.classList.remove("is-active"));
+  setActiveServiceRow(row);
+
+  activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
+  setActiveMonthlyRangeButton(activeMonthlyRange);
+
+  if (monthlyTitle) {
+    monthlyTitle.textContent = normalizedService;
+  }
+  if (monthlyCard) {
+    monthlyCard.classList.remove("hidden");
+  }
+
+  showMonthlyMessage("Загрузка...");
+  clearMonthlyRows();
+  loadMonthlyService(normalizedService, activeMonthlyRange);
 }
 
 function bindSummaryCards() {
@@ -621,10 +824,17 @@ function bindMonthlyRangeSwitch() {
       }
       activeMonthlyRange = monthlyRange;
       setActiveMonthlyRangeButton(activeMonthlyRange);
-      if (activeMonthlyMetric) {
+      if (activeMonthlyContext === MONTHLY_CONTEXT_METRIC && activeMonthlyMetric) {
         showMonthlyMessage("Загрузка...");
         clearMonthlyRows();
         loadMonthlyMetric(activeMonthlyMetric, activeMonthlyRange);
+      } else if (
+        activeMonthlyContext === MONTHLY_CONTEXT_SERVICE &&
+        activeMonthlyService
+      ) {
+        showMonthlyMessage("Загрузка...");
+        clearMonthlyRows();
+        loadMonthlyService(activeMonthlyService, activeMonthlyRange);
       }
     });
   });
@@ -744,6 +954,11 @@ function getCacheKey(section, from, to) {
 
 function getMonthlyCacheKey(metric, range) {
   return `monthly-${metric}-${range}-${DATE_FIELD}`;
+}
+
+function getMonthlyServiceCacheKey(serviceType, range) {
+  const normalized = encodeURIComponent((serviceType || "").toLowerCase());
+  return `monthly-service-${normalized}-${range}-${DATE_FIELD}`;
 }
 
 function validateDateRange(from, to) {
@@ -933,6 +1148,10 @@ async function fetchServicesMetrics() {
       errorRow.className = "services-empty services-empty--error";
       errorRow.textContent = `Ошибка загрузки данных: ${e.message}`;
       servicesList.append(errorRow);
+      setActiveServiceRow(null);
+      if (activeMonthlyContext === MONTHLY_CONTEXT_SERVICE) {
+        resetMonthlyDetails();
+      }
       if (gate.style.display !== "none") {
         errBox.textContent = `Ошибка загрузки: ${e.message}`;
       }

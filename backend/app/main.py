@@ -108,6 +108,18 @@ class MonthlyMetricsResponse(BaseModel):
     aggregate: Optional[float] = None
 
 
+class MonthlyServicePoint(BaseModel):
+    month: date
+    value: float
+
+
+class MonthlyServiceResponse(BaseModel):
+    service_type: str
+    range: MonthlyRange
+    points: list[MonthlyServicePoint]
+    aggregate: Optional[float] = None
+
+
 @dataclass(frozen=True)
 class DateFieldResolution:
     column: str
@@ -641,6 +653,92 @@ async def metrics_monthly(
         metric=metric,
         range=range_,
         date_field=resolution.column,
+        points=points,
+        aggregate=aggregate_value,
+    )
+
+
+@app.get("/api/services/monthly", response_model=MonthlyServiceResponse)
+async def services_monthly(
+    _: str = Depends(require_admin_auth),
+    service_type: str = Query(..., min_length=1),
+    range_: MonthlyRange = Query(default=MonthlyRange.this_year, alias="range"),
+) -> MonthlyServiceResponse:
+    normalized_service = service_type.strip()
+    if not normalized_service:
+        raise HTTPException(status_code=422, detail="service_type must be provided")
+
+    start_month, end_month = _month_range(range_)
+    end_date = _last_day_of_month(end_month)
+
+    filters, params = _build_filters(
+        CONSUMPTION_DATE_RESOLUTION,
+        date_from=start_month,
+        date_to=end_date,
+        table_alias="u",
+    )
+
+    params.update(
+        {
+            "series_start": start_month,
+            "series_end": end_month,
+            "service_type": normalized_service,
+        }
+    )
+
+    service_clause = sql.SQL(
+        "\n          AND COALESCE(u.uslugi_type, 'Без категории') = %(service_type)s"
+    )
+
+    query = sql.SQL(
+        """
+      WITH months AS (
+        SELECT generate_series(%(series_start)s::date, %(series_end)s::date, interval '1 month')::date AS month_start
+      ),
+      services_base AS (
+        SELECT
+          DATE_TRUNC('month', u.consumption_date)::date AS month_start,
+          COALESCE(u.total_amount, 0)::numeric AS total_amount
+        FROM uslugi_daily_mv AS u
+        WHERE 1=1
+          {filters}
+          {service_filter}
+      ),
+      services_agg AS (
+        SELECT
+          month_start,
+          COALESCE(SUM(total_amount), 0)::numeric AS total_amount
+        FROM services_base
+        GROUP BY month_start
+      )
+      SELECT
+        m.month_start,
+        COALESCE(s.total_amount, 0)::numeric AS total_amount
+      FROM months AS m
+      LEFT JOIN services_agg AS s ON s.month_start = m.month_start
+      ORDER BY m.month_start
+    """
+    ).format(filters=filters, service_filter=service_clause)
+
+    dsn = settings.database_url
+    rows = await fetchall(dsn, query, params) or []
+
+    points: list[MonthlyServicePoint] = []
+    aggregate_value = 0.0
+
+    for row in rows:
+        month_start = row.get("month_start")
+        value = _as_float(row.get("total_amount"))
+        aggregate_value += value
+        if isinstance(month_start, datetime):
+            month_value = month_start.date()
+        else:
+            month_value = month_start
+        points.append(MonthlyServicePoint(month=month_value, value=value))
+
+    return MonthlyServiceResponse(
+        service_type=normalized_service,
+        range=range_,
         points=points,
         aggregate=aggregate_value,
     )
