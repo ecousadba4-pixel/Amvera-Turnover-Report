@@ -61,39 +61,39 @@
         </div>
 
         <div class="info-summary" id="revenueSection" role="tabpanel" aria-labelledby="tabRevenue" aria-hidden="false">
-          <div class="summary-card summary-card--revenue">
+          <div class="summary-card summary-card--revenue" data-metric="revenue">
             <div class="summary-label">Выручка всего</div>
             <div class="summary-value" id="revenue">—</div>
           </div>
-          <div class="summary-card summary-card--count">
+          <div class="summary-card summary-card--count" data-metric="bookings_count">
             <div class="summary-label">Кол-во номеров</div>
             <div class="summary-value" id="count">—</div>
           </div>
-          <div class="summary-card summary-card--repeat">
+          <div class="summary-card summary-card--repeat" data-metric="level2plus_share">
             <div class="summary-label">Повт. клиенты</div>
             <div class="summary-value" id="share">—</div>
           </div>
-          <div class="summary-card summary-card--average">
+          <div class="summary-card summary-card--average" data-metric="avg_check">
             <div class="summary-label">Средний чек</div>
             <div class="summary-value" id="avg">—</div>
           </div>
-          <div class="summary-card summary-card--min">
+          <div class="summary-card summary-card--min" data-metric="min_booking">
             <div class="summary-label">Мин. чек</div>
             <div class="summary-value" id="min">—</div>
           </div>
-          <div class="summary-card summary-card--max">
+          <div class="summary-card summary-card--max" data-metric="max_booking">
             <div class="summary-label">Макс. чек</div>
             <div class="summary-value" id="max">—</div>
           </div>
-          <div class="summary-card summary-card--stay">
+          <div class="summary-card summary-card--stay" data-metric="avg_stay_days">
             <div class="summary-label">Ср. срок прожив.</div>
             <div class="summary-value" id="stay">—</div>
           </div>
-          <div class="summary-card summary-card--bonus">
+          <div class="summary-card summary-card--bonus" data-metric="bonus_payment_share">
             <div class="summary-label">Оплата бонусами</div>
             <div class="summary-value" id="bonus">—</div>
           </div>
-          <div class="summary-card summary-card--services">
+          <div class="summary-card summary-card--services" data-metric="services_share">
             <div class="summary-label">Доля услуг</div>
             <div class="summary-value" id="servicesShare">—</div>
           </div>
@@ -110,6 +110,39 @@
         <div class="services-total" id="servicesTotal">Итого: —</div>
         <div class="services-list" id="servicesList">
           <div class="services-empty">Выберите период, чтобы увидеть данные</div>
+        </div>
+      </div>
+    </div>
+    <div class="card monthly-card hidden" id="monthlyDetails" aria-live="polite">
+      <div class="monthly-header">
+        <div class="monthly-title" id="monthlyTitle">Помесячная динамика</div>
+        <div class="monthly-range" role="radiogroup" aria-label="Выбор периода">
+          <button
+            type="button"
+            class="monthly-range__btn is-active"
+            data-monthly-range="this_year"
+            aria-pressed="true"
+          >
+            Этот год
+          </button>
+          <button
+            type="button"
+            class="monthly-range__btn"
+            data-monthly-range="last_12_months"
+            aria-pressed="false"
+          >
+            Последние 12 месяцев
+          </button>
+        </div>
+      </div>
+      <div class="monthly-body">
+        <div class="monthly-empty" id="monthlyEmpty">Выберите показатель, чтобы увидеть динамику</div>
+        <div class="monthly-table hidden" id="monthlyTable">
+          <div class="monthly-table__header">
+            <div>Месяц</div>
+            <div>Значение</div>
+          </div>
+          <div class="monthly-table__rows" id="monthlyRows"></div>
         </div>
       </div>
     </div>

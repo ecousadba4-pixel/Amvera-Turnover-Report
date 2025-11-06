@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from enum import Enum
 from hmac import compare_digest
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Tuple
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,6 +76,35 @@ class ServicesResponse(BaseModel):
     total_amount: float
     items: list[ServiceItem]
     pagination: PaginationInfo
+
+
+class MonthlyRange(str, Enum):
+    this_year = "this_year"
+    last_12_months = "last_12_months"
+
+
+class MonthlyMetric(str, Enum):
+    revenue = "revenue"
+    avg_check = "avg_check"
+    bookings_count = "bookings_count"
+    level2plus_share = "level2plus_share"
+    min_booking = "min_booking"
+    max_booking = "max_booking"
+    avg_stay_days = "avg_stay_days"
+    bonus_payment_share = "bonus_payment_share"
+    services_share = "services_share"
+
+
+class MonthlyMetricPoint(BaseModel):
+    month: date
+    value: float
+
+
+class MonthlyMetricsResponse(BaseModel):
+    metric: MonthlyMetric
+    range: MonthlyRange
+    date_field: str
+    points: list[MonthlyMetricPoint]
 
 
 @dataclass(frozen=True)
@@ -162,6 +191,29 @@ def _build_filters(
 
 def _as_float(value: object) -> float:
     return float(value if value is not None else 0)
+
+
+def _add_months(base: date, months: int) -> date:
+    year = base.year + (base.month - 1 + months) // 12
+    month = (base.month - 1 + months) % 12 + 1
+    return date(year, month, 1)
+
+
+def _month_range(boundary: MonthlyRange) -> Tuple[date, date]:
+    today = date.today()
+    current_month = date(today.year, today.month, 1)
+
+    if boundary is MonthlyRange.this_year:
+        start_month = date(today.year, 1, 1)
+    else:
+        start_month = _add_months(current_month, -11)
+
+    return start_month, current_month
+
+
+def _last_day_of_month(month_start: date) -> date:
+    next_month = _add_months(month_start, 1)
+    return next_month - timedelta(days=1)
 
 
 @app.get("/api/metrics", response_model=MetricsResponse)
@@ -367,4 +419,152 @@ async def services(
             page_size=page_size,
             total_items=total_items,
         ),
+    )
+
+
+@app.get("/api/metrics/monthly", response_model=MonthlyMetricsResponse)
+async def metrics_monthly(
+    _: str = Depends(require_admin_auth),
+    metric: MonthlyMetric = Query(...),
+    range_: MonthlyRange = Query(default=MonthlyRange.this_year, alias="range"),
+    date_field: DateField = Query(default=DateField.created),
+) -> MonthlyMetricsResponse:
+    start_month, end_month = _month_range(range_)
+    end_date = _last_day_of_month(end_month)
+
+    resolution = _resolve_date_field(date_field)
+    filters, params = _build_filters(
+        resolution,
+        date_from=start_month,
+        date_to=end_date,
+        table_alias="g",
+    )
+    services_filters, services_params = _build_filters(
+        CONSUMPTION_DATE_RESOLUTION,
+        date_from=start_month,
+        date_to=end_date,
+        table_alias="u",
+    )
+
+    params.update(services_params)
+    query_params = {
+        **params,
+        "series_start": start_month,
+        "series_end": end_month,
+    }
+
+    query = sql.SQL(
+        """
+      WITH months AS (
+        SELECT generate_series(%(series_start)s::date, %(series_end)s::date, interval '1 month')::date AS month_start
+      ),
+      guests_base AS (
+        SELECT
+          DATE_TRUNC('month', g.{date_column})::date AS month_start,
+          g.total_amount,
+          g.loyalty_level,
+          g.created_at,
+          g.checkin_date,
+          g.bonus_spent
+        FROM guests AS g
+        WHERE 1=1
+          {filters}
+      ),
+      guests_agg AS (
+        SELECT
+          month_start,
+          COUNT(*)::int AS bookings_count,
+          COALESCE(SUM(total_amount), 0)::numeric AS revenue,
+          COALESCE(MIN(total_amount), 0)::numeric AS min_booking,
+          COALESCE(MAX(total_amount), 0)::numeric AS max_booking,
+          COALESCE(AVG(total_amount), 0)::numeric AS avg_check,
+          COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END), 0)::int AS lvl2p,
+          COALESCE(AVG((created_at::date - checkin_date)::numeric), 0)::numeric AS avg_stay_days,
+          COALESCE(SUM(bonus_spent), 0)::numeric AS bonus_spent_sum
+        FROM guests_base
+        GROUP BY month_start
+      ),
+      services_agg AS (
+        SELECT
+          DATE_TRUNC('month', u.consumption_date)::date AS month_start,
+          COALESCE(SUM(u.total_amount), 0)::numeric AS services_amount
+        FROM uslugi_daily_mv AS u
+        WHERE 1=1
+          {services_filters}
+        GROUP BY DATE_TRUNC('month', u.consumption_date)
+      )
+      SELECT
+        m.month_start,
+        COALESCE(g.bookings_count, 0)::int AS bookings_count,
+        COALESCE(g.revenue, 0)::numeric AS revenue,
+        COALESCE(g.min_booking, 0)::numeric AS min_booking,
+        COALESCE(g.max_booking, 0)::numeric AS max_booking,
+        COALESCE(g.avg_check, 0)::numeric AS avg_check,
+        COALESCE(g.lvl2p, 0)::int AS lvl2p,
+        COALESCE(g.avg_stay_days, 0)::numeric AS avg_stay_days,
+        COALESCE(g.bonus_spent_sum, 0)::numeric AS bonus_spent_sum,
+        COALESCE(s.services_amount, 0)::numeric AS services_amount
+      FROM months AS m
+      LEFT JOIN guests_agg AS g ON g.month_start = m.month_start
+      LEFT JOIN services_agg AS s ON s.month_start = m.month_start
+      ORDER BY m.month_start
+    """
+    ).format(
+        date_column=sql.Identifier(resolution.column),
+        filters=filters,
+        services_filters=services_filters,
+    )
+
+    dsn = settings.database_url
+    async with get_conn(dsn) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, query_params)
+            rows = await cur.fetchall() or []
+
+    points: list[MonthlyMetricPoint] = []
+
+    for row in rows:
+        month_start = row.get("month_start")
+        if not isinstance(month_start, date):
+            continue
+
+        revenue = _as_float(row.get("revenue"))
+        bookings_count = int(row.get("bookings_count", 0) or 0)
+        lvl2p = int(row.get("lvl2p", 0) or 0)
+        bonus_spent_sum = _as_float(row.get("bonus_spent_sum"))
+        services_amount = _as_float(row.get("services_amount"))
+
+        if metric is MonthlyMetric.revenue:
+            value = revenue
+        elif metric is MonthlyMetric.avg_check:
+            value = _as_float(row.get("avg_check"))
+        elif metric is MonthlyMetric.bookings_count:
+            value = float(bookings_count)
+        elif metric is MonthlyMetric.level2plus_share:
+            value = float(lvl2p / bookings_count) if bookings_count else 0.0
+        elif metric is MonthlyMetric.min_booking:
+            value = _as_float(row.get("min_booking")) if bookings_count else 0.0
+        elif metric is MonthlyMetric.max_booking:
+            value = _as_float(row.get("max_booking")) if bookings_count else 0.0
+        elif metric is MonthlyMetric.avg_stay_days:
+            value = _as_float(row.get("avg_stay_days"))
+        elif metric is MonthlyMetric.bonus_payment_share:
+            value = float(bonus_spent_sum / revenue) if revenue else 0.0
+        elif metric is MonthlyMetric.services_share:
+            value = float(services_amount / revenue) if revenue else 0.0
+        else:
+            value = 0.0
+
+        points.append(
+            MonthlyMetricPoint(
+                month=month_start,
+                value=value,
+            )
+        )
+
+    return MonthlyMetricsResponse(
+        metric=metric,
+        range=range_,
+        date_field=resolution.column,
+        points=points,
     )

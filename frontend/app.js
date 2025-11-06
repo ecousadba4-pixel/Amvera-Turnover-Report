@@ -4,6 +4,7 @@ const DATE_FIELD_CREATED = "created";
 const DATE_FIELD_CHECKIN = "checkin";
 const SECTION_REVENUE = "revenue";
 const SECTION_SERVICES = "services";
+const SECTION_MONTHLY = "monthly";
 const DEFAULT_ACTIVE_SECTION = SECTION_REVENUE;
 const DATE_FIELD = DATE_FIELD_CREATED; // DATE_FIELD_CREATED | DATE_FIELD_CHECKIN
 
@@ -60,11 +61,24 @@ const gate = $("#gate");
 const errBox = $("#err");
 const pwdInput = $("#pwd");
 const goBtn = $("#goBtn");
+const summaryCards = $$(".info-summary .summary-card");
+const monthlyCard = $("#monthlyDetails");
+const monthlyTitle = $("#monthlyTitle");
+const monthlyEmpty = $("#monthlyEmpty");
+const monthlyTable = $("#monthlyTable");
+const monthlyRows = $("#monthlyRows");
+const monthlyRangeButtons = $$('[data-monthly-range]');
 
 const presetButtons = [btnCurMonth, btnPrevMonth];
 
 const STORAGE_KEY = "u4sRevenueAuthHash";
 const FETCH_DEBOUNCE_DELAY = 600;
+
+const MONTHLY_RANGE_THIS_YEAR = "this_year";
+const MONTHLY_RANGE_LAST_12 = "last_12_months";
+const MONTHLY_RANGE_DEFAULT = MONTHLY_RANGE_THIS_YEAR;
+const MONTHLY_INITIAL_MESSAGE = "Выберите показатель, чтобы увидеть динамику";
+const MONTHLY_DEFAULT_TITLE = "Помесячная динамика";
 
 const requestCache = new Map();
 const REQUEST_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -105,6 +119,29 @@ function getNumberFormatter(digits) {
   }
   return numberFormatters.get(digits);
 }
+
+const monthFormatter = new Intl.DateTimeFormat("ru-RU", {
+  month: "long",
+  year: "numeric",
+});
+
+const MONTHLY_METRIC_CONFIG = {
+  revenue: { label: "Выручка всего", format: { type: "currency" } },
+  bookings_count: { label: "Кол-во номеров", format: { type: "number", digits: 0 } },
+  level2plus_share: { label: "Повт. клиенты", format: { type: "percent", digits: 0 } },
+  avg_check: { label: "Средний чек", format: { type: "currency" } },
+  min_booking: { label: "Мин. чек", format: { type: "currency" } },
+  max_booking: { label: "Макс. чек", format: { type: "currency" } },
+  avg_stay_days: {
+    label: "Ср. срок прожив.",
+    format: { type: "number", digits: 1, suffix: " дн." },
+  },
+  bonus_payment_share: {
+    label: "Оплата бонусами",
+    format: { type: "percent", digits: 1 },
+  },
+  services_share: { label: "Доля услуг", format: { type: "percent", digits: 0 } },
+};
 
 function getCachedResponse(key) {
   const entry = requestCache.get(key);
@@ -173,10 +210,14 @@ let servicesFetchTimer = null;
 const controllers = {
   [SECTION_REVENUE]: null,
   [SECTION_SERVICES]: null,
+  [SECTION_MONTHLY]: null,
 };
 let loadingCounter = 0;
 let servicesDirty = true;
 let activeSection = DEFAULT_ACTIVE_SECTION;
+let activeSummaryCard = null;
+let activeMonthlyMetric = null;
+let activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
 
 function toNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -263,6 +304,270 @@ function applyServicesMetrics(data) {
   });
 
   servicesList.append(fragment);
+}
+
+function formatMonthLabel(isoDate) {
+  if (!isoDate) {
+    return "—";
+  }
+  const parsed = new Date(isoDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  const raw = monthFormatter.format(parsed);
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "—";
+}
+
+function formatMonthlyValue(metric, value) {
+  const cfg = MONTHLY_METRIC_CONFIG[metric];
+  const numericValue = toNumber(value);
+  if (!cfg || !cfg.format) {
+    return fmtNumber(numericValue);
+  }
+  const { type, digits = 0, suffix = "" } = cfg.format;
+  let formatted;
+  switch (type) {
+    case "currency":
+      formatted = fmtRub(numericValue);
+      break;
+    case "percent":
+      formatted = fmtPct(numericValue, digits);
+      break;
+    case "number":
+    default:
+      formatted = fmtNumber(numericValue, digits);
+      break;
+  }
+  return suffix ? `${formatted}${suffix}` : formatted;
+}
+
+function showMonthlyMessage(message) {
+  if (monthlyEmpty) {
+    monthlyEmpty.textContent = message;
+    monthlyEmpty.classList.remove("hidden");
+  }
+  if (monthlyTable) {
+    monthlyTable.classList.add("hidden");
+  }
+}
+
+function clearMonthlyRows() {
+  if (monthlyRows) {
+    monthlyRows.innerHTML = "";
+  }
+}
+
+function renderMonthlyMetrics(metric, payload) {
+  if (!payload || metric !== activeMonthlyMetric) {
+    return;
+  }
+  if (payload.range && payload.range !== activeMonthlyRange) {
+    return;
+  }
+  if (!monthlyTable || !monthlyEmpty || !monthlyRows) {
+    return;
+  }
+
+  const points = Array.isArray(payload.points) ? payload.points : [];
+  if (points.length === 0) {
+    showMonthlyMessage("Данных за выбранный период нет");
+    return;
+  }
+
+  monthlyEmpty.classList.add("hidden");
+  monthlyTable.classList.remove("hidden");
+  clearMonthlyRows();
+
+  const fragment = document.createDocumentFragment();
+
+  points
+    .slice()
+    .sort((a, b) => new Date(b.month) - new Date(a.month))
+    .forEach((point) => {
+      const row = document.createElement("div");
+      row.className = "monthly-row";
+
+      const monthEl = document.createElement("div");
+      monthEl.className = "monthly-row__month";
+      monthEl.textContent = formatMonthLabel(point.month);
+
+      const valueEl = document.createElement("div");
+      valueEl.className = "monthly-row__value";
+      valueEl.textContent = formatMonthlyValue(metric, point.value);
+
+      row.append(monthEl, valueEl);
+      fragment.append(row);
+    });
+
+  monthlyRows.append(fragment);
+}
+
+async function loadMonthlyMetric(metric, range) {
+  if (!authHash) {
+    return false;
+  }
+  if (!API_BASE) {
+    console.error("Базовый URL API не сконфигурирован");
+    return false;
+  }
+
+  const cacheKey = getMonthlyCacheKey(metric, range);
+  const cached = getCachedResponse(cacheKey);
+  if (cached) {
+    renderMonthlyMetrics(metric, cached);
+    return true;
+  }
+
+  abortSectionController(SECTION_MONTHLY);
+
+  const controller = new AbortController();
+  setSectionController(SECTION_MONTHLY, controller);
+  setLoadingState(true);
+
+  const params = new URLSearchParams({
+    metric,
+    range,
+    date_field: DATE_FIELD,
+  });
+
+  const url = `${API_BASE}/api/metrics/monthly?${params.toString()}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { "X-Auth-Hash": authHash },
+      signal: controller.signal,
+    });
+
+    if (resp.status === 401 || resp.status === 403) {
+      handleAuthFailure("Неверный пароль или сессия истекла.");
+      showMonthlyMessage("Для просмотра требуется авторизация");
+      return false;
+    }
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    setCachedResponse(cacheKey, data);
+    renderMonthlyMetrics(metric, data);
+    return true;
+  } catch (e) {
+    if (isAbortError(e)) {
+      return false;
+    }
+    console.error("Ошибка загрузки помесячных данных", e);
+    showMonthlyMessage(`Ошибка загрузки данных: ${e.message}`);
+    return false;
+  } finally {
+    if (getSectionController(SECTION_MONTHLY) === controller) {
+      setSectionController(SECTION_MONTHLY, null);
+      setLoadingState(false);
+    }
+  }
+}
+
+function setActiveMonthlyRangeButton(range) {
+  monthlyRangeButtons.forEach((btn) => {
+    if (!btn) {
+      return;
+    }
+    const isActive = btn.dataset.monthlyRange === range;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
+function resetMonthlyDetails() {
+  activeSummaryCard = null;
+  activeMonthlyMetric = null;
+  activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
+  setActiveMonthlyRangeButton(activeMonthlyRange);
+  summaryCards.forEach((card) => card.classList.remove("is-active"));
+  clearMonthlyRows();
+  showMonthlyMessage(MONTHLY_INITIAL_MESSAGE);
+  if (monthlyCard) {
+    monthlyCard.classList.add("hidden");
+  }
+  if (monthlyTitle) {
+    monthlyTitle.textContent = MONTHLY_DEFAULT_TITLE;
+  }
+  abortSectionController(SECTION_MONTHLY);
+}
+
+function handleSummaryCardClick(card, metric) {
+  if (!metric || !MONTHLY_METRIC_CONFIG[metric]) {
+    return;
+  }
+
+  if (activeSummaryCard === card && monthlyCard && !monthlyCard.classList.contains("hidden")) {
+    resetMonthlyDetails();
+    return;
+  }
+
+  if (!authHash) {
+    showGate();
+    return;
+  }
+
+  activeSummaryCard = card;
+  summaryCards.forEach((item) => {
+    item.classList.toggle("is-active", item === card);
+  });
+
+  activeMonthlyMetric = metric;
+  activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
+  setActiveMonthlyRangeButton(activeMonthlyRange);
+
+  if (monthlyTitle) {
+    monthlyTitle.textContent = MONTHLY_METRIC_CONFIG[metric].label;
+  }
+  if (monthlyCard) {
+    monthlyCard.classList.remove("hidden");
+  }
+
+  showMonthlyMessage("Загрузка...");
+  clearMonthlyRows();
+  loadMonthlyMetric(metric, activeMonthlyRange);
+}
+
+function bindSummaryCards() {
+  summaryCards.forEach((card) => {
+    if (!card.dataset.metric) {
+      return;
+    }
+    card.setAttribute("role", "button");
+    if (!card.hasAttribute("tabindex")) {
+      card.setAttribute("tabindex", "0");
+    }
+    card.addEventListener("click", () => {
+      handleSummaryCardClick(card, card.dataset.metric);
+    });
+    card.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter" || evt.key === " ") {
+        evt.preventDefault();
+        handleSummaryCardClick(card, card.dataset.metric);
+      }
+    });
+  });
+}
+
+function bindMonthlyRangeSwitch() {
+  monthlyRangeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const { monthlyRange } = btn.dataset;
+      if (!monthlyRange || monthlyRange === activeMonthlyRange) {
+        return;
+      }
+      activeMonthlyRange = monthlyRange;
+      setActiveMonthlyRangeButton(activeMonthlyRange);
+      if (activeMonthlyMetric) {
+        showMonthlyMessage("Загрузка...");
+        clearMonthlyRows();
+        loadMonthlyMetric(activeMonthlyMetric, activeMonthlyRange);
+      }
+    });
+  });
 }
 
 function scheduleRevenueFetch() {
@@ -377,6 +682,10 @@ function getCacheKey(section, from, to) {
   return `${section}-${fromSafe}-${toSafe}-${DATE_FIELD}`;
 }
 
+function getMonthlyCacheKey(metric, range) {
+  return `monthly-${metric}-${range}-${DATE_FIELD}`;
+}
+
 function validateDateRange(from, to) {
   if (from && to) {
     if (new Date(from) > new Date(to)) {
@@ -432,6 +741,7 @@ function handleAuthFailure(message) {
   requestCache.clear();
   lastTriggeredRange.from = null;
   lastTriggeredRange.to = null;
+  resetMonthlyDetails();
   showGate(message);
 }
 
@@ -672,6 +982,10 @@ function applySection(section) {
     dashboard.classList.toggle("dashboard--single", isRevenue);
   }
 
+  if (!isRevenue) {
+    resetMonthlyDetails();
+  }
+
   if (
     !isRevenue &&
     authHash &&
@@ -711,6 +1025,7 @@ function bindPasswordForm() {
     try {
       authHash = await sha256Hex(pwd);
       requestCache.clear();
+      resetMonthlyDetails();
       persistHash(authHash);
       if (!fromDate.value || !toDate.value) {
         setRangeToCurrentMonth();
@@ -750,6 +1065,8 @@ function initializeEventHandlers() {
   bindFilterControls();
   bindSectionSwitch();
   bindPasswordForm();
+  bindSummaryCards();
+  bindMonthlyRangeSwitch();
 }
 
 function applyInitialSectionState() {
@@ -770,6 +1087,7 @@ function restoreSessionFromStorage() {
 }
 
 function init() {
+  resetMonthlyDetails();
   initializeFilters();
   initializeEventHandlers();
   applyInitialSectionState();
