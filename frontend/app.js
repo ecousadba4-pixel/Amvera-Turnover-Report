@@ -66,6 +66,77 @@ const STORAGE_KEY = "u4sRevenueAuthHash";
 const FETCH_DEBOUNCE_DELAY = 600;
 
 const requestCache = new Map();
+const REQUEST_CACHE_TTL_MS = 5 * 60 * 1000;
+const REQUEST_CACHE_MAX_ENTRIES = 50;
+
+const RUB_FORMATTER = new Intl.NumberFormat("ru-RU", {
+  style: "currency",
+  currency: "RUB",
+  maximumFractionDigits: 0,
+});
+
+const percentFormatters = new Map();
+const numberFormatters = new Map();
+
+function getPercentFormatter(digits) {
+  if (!percentFormatters.has(digits)) {
+    percentFormatters.set(
+      digits,
+      new Intl.NumberFormat("ru-RU", {
+        style: "percent",
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      })
+    );
+  }
+  return percentFormatters.get(digits);
+}
+
+function getNumberFormatter(digits) {
+  if (!numberFormatters.has(digits)) {
+    numberFormatters.set(
+      digits,
+      new Intl.NumberFormat("ru-RU", {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      })
+    );
+  }
+  return numberFormatters.get(digits);
+}
+
+function getCachedResponse(key) {
+  const entry = requestCache.get(key);
+  if (!entry) {
+    return null;
+  }
+  if (entry.expiresAt < Date.now()) {
+    requestCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function pruneCacheSize() {
+  if (requestCache.size <= REQUEST_CACHE_MAX_ENTRIES) {
+    return;
+  }
+
+  const sortedKeys = Array.from(requestCache.entries())
+    .sort((a, b) => a[1].expiresAt - b[1].expiresAt)
+    .map(([key]) => key);
+
+  while (requestCache.size > REQUEST_CACHE_MAX_ENTRIES && sortedKeys.length) {
+    const keyToDelete = sortedKeys.shift();
+    requestCache.delete(keyToDelete);
+  }
+}
+
+function setCachedResponse(key, data) {
+  const expiresAt = Date.now() + REQUEST_CACHE_TTL_MS;
+  requestCache.set(key, { data, expiresAt });
+  pruneCacheSize();
+}
 
 function canUseSessionStorage() {
   try {
@@ -87,31 +158,21 @@ function clearError() {
   showError("");
 }
 
-const fmtRub = (v) =>
-  new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "RUB",
-    maximumFractionDigits: 0,
-  }).format(v);
+const fmtRub = (v) => RUB_FORMATTER.format(v);
 
 const fmtPct = (v, fractionDigits = 1) =>
-  new Intl.NumberFormat("ru-RU", {
-    style: "percent",
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(v);
+  getPercentFormatter(fractionDigits).format(v);
 
 const fmtNumber = (v, fractionDigits = 0) =>
-  new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(v);
+  getNumberFormatter(fractionDigits).format(v);
 
 let authHash = null;
 let revenueFetchTimer = null;
 let servicesFetchTimer = null;
-let revenueController = null;
-let servicesController = null;
+const controllers = {
+  [SECTION_REVENUE]: null,
+  [SECTION_SERVICES]: null,
+};
 let loadingCounter = 0;
 let servicesDirty = true;
 let activeSection = DEFAULT_ACTIVE_SECTION;
@@ -177,6 +238,8 @@ function applyServicesMetrics(data) {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
+
   items.forEach((item) => {
     const row = document.createElement("div");
     row.className = "services-row";
@@ -195,8 +258,10 @@ function applyServicesMetrics(data) {
     shareEl.textContent = `${shareValue}%`;
 
     row.append(name, amount, shareEl);
-    servicesList.append(row);
+    fragment.append(row);
   });
+
+  servicesList.append(fragment);
 }
 
 function scheduleRevenueFetch() {
@@ -227,6 +292,23 @@ function setLoadingState(isLoading) {
     if (loadingCounter === 0) {
       document.body.classList.remove("is-loading");
     }
+  }
+}
+
+function getSectionController(section) {
+  return controllers[section] || null;
+}
+
+function setSectionController(section, controller) {
+  controllers[section] = controller;
+}
+
+function abortSectionController(section) {
+  const controller = getSectionController(section);
+  if (controller) {
+    setSectionController(section, null);
+    setLoadingState(false);
+    controller.abort();
   }
 }
 
@@ -283,6 +365,7 @@ function setActivePreset(buttons, btn) {
 }
 
 const rangeInputs = { from: fromDate, to: toDate };
+const lastTriggeredRange = { from: null, to: null };
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -342,86 +425,24 @@ async function sha256Hex(str) {
     .join("");
 }
 
-async function fetchRevenueMetrics() {
-  if (!authHash) {
-    return false;
-  }
-  if (!API_BASE) {
-    console.error("Базовый URL API не сконфигурирован");
-    return false;
-  }
-
-  const fromValue = fromDate.value;
-  const toValue = toDate.value;
-  if (!validateDateRange(fromValue, toValue)) {
-    return false;
-  }
-
-  const cacheKey = getCacheKey(SECTION_REVENUE, fromValue, toValue);
-  const cached = requestCache.get(cacheKey);
-  if (cached) {
-    applyRevenueMetrics(cached);
-    return true;
-  }
-
-  if (revenueController) {
-    revenueController.abort();
-  }
-
-  const controller = new AbortController();
-  revenueController = controller;
-  setLoadingState(true);
-
-  const params = new URLSearchParams();
-  if (fromValue) {
-    params.set("date_from", fromValue);
-  }
-  if (toValue) {
-    params.set("date_to", toValue);
-  }
-  params.set("date_field", DATE_FIELD);
-  const url = `${API_BASE}/api/metrics?${params.toString()}`;
-
-  try {
-    const resp = await fetch(url, {
-      headers: { "X-Auth-Hash": authHash },
-      signal: controller.signal,
-    });
-
-    if (resp.status === 401 || resp.status === 403) {
-      persistHash(null);
-      authHash = null;
-      requestCache.clear();
-      showGate("Неверный пароль или сессия истекла.");
-      return false;
-    }
-
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const json = await resp.json();
-    applyRevenueMetrics(json);
-    requestCache.set(cacheKey, json);
-    return true;
-  } catch (e) {
-    if (isAbortError(e)) {
-      return false;
-    }
-    console.error("Ошибка загрузки метрик", e);
-    if (gate.style.display !== "none") {
-      errBox.textContent = `Ошибка загрузки: ${e.message}`;
-    }
-    return false;
-  } finally {
-    if (revenueController === controller) {
-      revenueController = null;
-      setLoadingState(false);
-    }
-  }
+function handleAuthFailure(message) {
+  persistHash(null);
+  authHash = null;
+  requestCache.clear();
+  lastTriggeredRange.from = null;
+  lastTriggeredRange.to = null;
+  showGate(message);
 }
 
-async function fetchServicesMetrics() {
+async function loadMetrics({
+  section,
+  endpoint,
+  onApply,
+  onCacheHit,
+  onSuccess,
+  onAuthError,
+  onError,
+}) {
   if (!authHash) {
     return false;
   }
@@ -436,20 +457,20 @@ async function fetchServicesMetrics() {
     return false;
   }
 
-  const cacheKey = getCacheKey(SECTION_SERVICES, fromValue, toValue);
-  const cached = requestCache.get(cacheKey);
+  const cacheKey = getCacheKey(section, fromValue, toValue);
+  const cached = getCachedResponse(cacheKey);
   if (cached) {
-    applyServicesMetrics(cached);
-    servicesDirty = false;
+    onApply(cached);
+    if (typeof onCacheHit === "function") {
+      onCacheHit(cached);
+    }
     return true;
   }
 
-  if (servicesController) {
-    servicesController.abort();
-  }
+  abortSectionController(section);
 
   const controller = new AbortController();
-  servicesController = controller;
+  setSectionController(section, controller);
   setLoadingState(true);
 
   const params = new URLSearchParams();
@@ -460,7 +481,8 @@ async function fetchServicesMetrics() {
     params.set("date_to", toValue);
   }
   params.set("date_field", DATE_FIELD);
-  const url = `${API_BASE}/api/services?${params.toString()}`;
+
+  const url = `${API_BASE}/api/${endpoint}?${params.toString()}`;
 
   try {
     const resp = await fetch(url, {
@@ -469,11 +491,10 @@ async function fetchServicesMetrics() {
     });
 
     if (resp.status === 401 || resp.status === 403) {
-      persistHash(null);
-      authHash = null;
-      servicesDirty = true;
-      requestCache.clear();
-      showGate("Неверный пароль или сессия истекла.");
+      handleAuthFailure("Неверный пароль или сессия истекла.");
+      if (typeof onAuthError === "function") {
+        onAuthError();
+      }
       return false;
     }
 
@@ -482,37 +503,79 @@ async function fetchServicesMetrics() {
     }
 
     const data = await resp.json();
-    applyServicesMetrics(data);
-    requestCache.set(cacheKey, data);
-    servicesDirty = false;
+    onApply(data);
+    setCachedResponse(cacheKey, data);
+    if (typeof onSuccess === "function") {
+      onSuccess(data);
+    }
     return true;
   } catch (e) {
     if (isAbortError(e)) {
       return false;
     }
-    console.error("Ошибка загрузки услуг", e);
-    servicesList.innerHTML = "";
-    const errorRow = document.createElement("div");
-    errorRow.className = "services-empty services-empty--error";
-    errorRow.textContent = `Ошибка загрузки данных: ${e.message}`;
-    servicesList.append(errorRow);
-    if (gate.style.display !== "none") {
-      errBox.textContent = `Ошибка загрузки: ${e.message}`;
+    if (typeof onError === "function") {
+      onError(e);
+    } else {
+      console.error(`Ошибка загрузки данных для ${section}`, e);
     }
-    servicesDirty = true;
     return false;
   } finally {
-    if (servicesController === controller) {
-      servicesController = null;
+    if (getSectionController(section) === controller) {
+      setSectionController(section, null);
       setLoadingState(false);
     }
   }
+}
+
+async function fetchRevenueMetrics() {
+  return loadMetrics({
+    section: SECTION_REVENUE,
+    endpoint: "metrics",
+    onApply: applyRevenueMetrics,
+    onError: (e) => {
+      console.error("Ошибка загрузки метрик", e);
+      if (gate.style.display !== "none") {
+        errBox.textContent = `Ошибка загрузки: ${e.message}`;
+      }
+    },
+  });
+}
+
+async function fetchServicesMetrics() {
+  return loadMetrics({
+    section: SECTION_SERVICES,
+    endpoint: "services",
+    onApply: applyServicesMetrics,
+    onCacheHit: () => {
+      servicesDirty = false;
+    },
+    onSuccess: () => {
+      servicesDirty = false;
+    },
+    onAuthError: () => {
+      servicesDirty = true;
+    },
+    onError: (e) => {
+      console.error("Ошибка загрузки услуг", e);
+      servicesList.innerHTML = "";
+      const errorRow = document.createElement("div");
+      errorRow.className = "services-empty services-empty--error";
+      errorRow.textContent = `Ошибка загрузки данных: ${e.message}`;
+      servicesList.append(errorRow);
+      if (gate.style.display !== "none") {
+        errBox.textContent = `Ошибка загрузки: ${e.message}`;
+      }
+      servicesDirty = true;
+    },
+  });
 }
 
 function bindFilterControls() {
   const handleManualChange = () => {
     setActivePreset(presetButtons, null);
     servicesDirty = true;
+    lastTriggeredRange.from = null;
+    lastTriggeredRange.to = null;
     if (!validateDateRange(fromDate.value, toDate.value)) {
       cancelRevenueFetch();
       cancelServicesFetch();
@@ -533,12 +596,25 @@ function bindFilterControls() {
   });
 
   const triggerImmediateFetch = () => {
-    servicesDirty = true;
-    if (!validateDateRange(fromDate.value, toDate.value)) {
+    const currentFrom = fromDate.value;
+    const currentTo = toDate.value;
+    if (
+      lastTriggeredRange.from === currentFrom &&
+      lastTriggeredRange.to === currentTo
+    ) {
+      return;
+    }
+
+    if (!validateDateRange(currentFrom, currentTo)) {
       cancelRevenueFetch();
       cancelServicesFetch();
       return;
     }
+
+    lastTriggeredRange.from = currentFrom;
+    lastTriggeredRange.to = currentTo;
+
+    servicesDirty = true;
     cancelRevenueFetch();
     fetchRevenueMetrics();
     if (activeSection === SECTION_SERVICES) {
@@ -596,7 +672,7 @@ function applySection(section) {
     !isRevenue &&
     authHash &&
     servicesDirty &&
-    !servicesController &&
+    !getSectionController(SECTION_SERVICES) &&
     servicesFetchTimer === null
   ) {
     fetchServicesMetrics();

@@ -11,10 +11,23 @@ _pool_lock = asyncio.Lock()
 _pools: Dict[str, AsyncConnectionPool] = {}
 
 
+_POOL_CONFIG = {
+    "min_size": 1,
+    "max_size": 10,
+    "timeout": 30,
+    "max_lifetime": 60 * 60,
+    "max_idle": 5 * 60,
+}
+
+
 def _create_pool(dsn: str) -> AsyncConnectionPool:
     """Instantiate an async connection pool configured to return dict rows."""
 
-    return AsyncConnectionPool(conninfo=dsn, kwargs={"row_factory": dict_row})
+    return AsyncConnectionPool(
+        conninfo=dsn,
+        kwargs={"row_factory": dict_row},
+        **_POOL_CONFIG,
+    )
 
 
 async def _get_or_create_pool(dsn: str) -> AsyncConnectionPool:
