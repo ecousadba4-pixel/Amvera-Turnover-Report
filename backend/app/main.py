@@ -58,8 +58,9 @@ def _configure_cors(app: FastAPI) -> None:
 
 def _cors_pattern_to_regex(pattern: str) -> str:
     escaped = re.escape(pattern)
-    # Разрешаем опциональный поддомен, если шаблон содержит "*." (например, https://*.example.com)
-    escaped = re.sub(r"\\\*\\.", r"(?:[^/.]+\\.)?", escaped)
+    # Разрешаем любое количество уровней поддоменов, если шаблон содержит "*."
+    # (например, https://*.example.com должно охватывать example.com и foo.bar.example.com)
+    escaped = re.sub(r"\\\*\\.", r"(?:[^/.]+\\.)*", escaped)
     return "^" + escaped.replace("\\*", "[^/]*") + "$"
 
 
