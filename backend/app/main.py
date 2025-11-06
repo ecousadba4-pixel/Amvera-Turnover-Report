@@ -117,6 +117,9 @@ _DATE_FIELD_RESOLUTIONS = {
 }
 
 
+CONSUMPTION_DATE_RESOLUTION = DateFieldResolution("consumption_date", "consumption_date")
+
+
 def _resolve_date_field(wanted: DateField) -> DateFieldResolution:
     return _DATE_FIELD_RESOLUTIONS.get(wanted, _DATE_FIELD_RESOLUTIONS[DateField.created])
 
@@ -175,7 +178,7 @@ async def metrics(
     resolution = _resolve_date_field(date_field)
     filters, params = _build_filters(resolution, date_from, date_to)
     services_filters, services_params = _build_filters(
-        resolution, date_from, date_to, table_alias="g_u"
+        CONSUMPTION_DATE_RESOLUTION, date_from, date_to, table_alias="u"
     )
     params.update(services_params)
 
@@ -187,19 +190,8 @@ async def metrics(
           g.loyalty_level,
           g.created_at,
           g.checkin_date,
-          g.bonus_spent,
-          COALESCE(u.services_total, 0)::numeric AS services_total
+          g.bonus_spent
         FROM guests AS g
-        LEFT JOIN (
-          SELECT
-            u.shelter_booking_id,
-            COALESCE(SUM(u.uslugi_amount), 0)::numeric AS services_total
-          FROM uslugi AS u
-          JOIN guests AS g_u ON g_u.shelter_booking_id = u.shelter_booking_id
-          WHERE 1=1
-            {services_filters}
-          GROUP BY u.shelter_booking_id
-        ) AS u ON u.shelter_booking_id = g.shelter_booking_id
         WHERE 1=1
           {filters}
       )
@@ -212,7 +204,12 @@ async def metrics(
         COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END), 0)::int AS lvl2p,
         COALESCE(AVG((created_at::date - checkin_date)::numeric), 0)::numeric AS avg_stay_days,
         COALESCE(SUM(bonus_spent), 0)::numeric AS bonus_spent_sum,
-        COALESCE(SUM(services_total), 0)::numeric AS services_amount
+        (
+          SELECT COALESCE(SUM(u.total_amount), 0)::numeric
+          FROM uslugi_daily_mv AS u
+          WHERE 1=1
+            {services_filters}
+        ) AS services_amount
       FROM base
     """
     ).format(filters=filters, services_filters=services_filters)
@@ -262,8 +259,8 @@ async def services(
         raise HTTPException(status_code=422, detail="date_from must be before or equal to date_to")
 
     dsn = settings.database_url
-    resolution = _resolve_date_field(date_field)
-    filters, params = _build_filters(resolution, date_from, date_to, table_alias="g")
+    resolution = CONSUMPTION_DATE_RESOLUTION
+    filters, params = _build_filters(resolution, date_from, date_to, table_alias="u")
 
     offset = (page - 1) * page_size
 
@@ -272,9 +269,8 @@ async def services(
       WITH aggregated AS (
         SELECT
           COALESCE(u.uslugi_type, 'Без категории') AS service_type,
-          COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
-        FROM uslugi AS u
-        JOIN guests AS g ON g.shelter_booking_id = u.shelter_booking_id
+          COALESCE(SUM(u.total_amount), 0)::numeric AS total_amount
+        FROM uslugi_daily_mv AS u
         WHERE 1=1
           {filters}
         GROUP BY COALESCE(u.uslugi_type, 'Без категории')
