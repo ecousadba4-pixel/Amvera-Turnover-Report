@@ -1028,6 +1028,7 @@ async function loadMetrics({
   onSuccess,
   onAuthError,
   onError,
+  includeDateField = true,
 }) {
   if (!authHash) {
     return false;
@@ -1066,7 +1067,9 @@ async function loadMetrics({
   if (toValue) {
     params.set("date_to", toValue);
   }
-  params.set("date_field", DATE_FIELD);
+  if (includeDateField) {
+    params.set("date_field", DATE_FIELD);
+  }
 
   const url = `${API_BASE}/api/${endpoint}?${params.toString()}`;
 
@@ -1132,6 +1135,7 @@ async function fetchServicesMetrics() {
     section: SECTION_SERVICES,
     endpoint: "services",
     onApply: applyServicesMetrics,
+    includeDateField: false,
     onCacheHit: () => {
       servicesDirty = false;
     },
@@ -1311,8 +1315,10 @@ function bindPasswordForm() {
       }
       cancelRevenueFetch();
       cancelServicesFetch();
-      const okRevenue = await fetchRevenueMetrics();
-      const okServices = await fetchServicesMetrics();
+      const [okRevenue, okServices] = await Promise.all([
+        fetchRevenueMetrics(),
+        fetchServicesMetrics(),
+      ]);
       if (okRevenue) {
         pwdInput.value = "";
         hideGate();
@@ -1406,10 +1412,22 @@ function scheduleHeightUpdate() {
 // Отправляем высоту после загрузки и при изменениях DOM
 window.addEventListener('load', scheduleHeightUpdate);
 window.addEventListener('resize', scheduleHeightUpdate);
-new MutationObserver(scheduleHeightUpdate).observe(document.body, {
-  childList: true,
-  subtree: true,
-});
+
+const heightObserverTarget = dashboard || document.body;
+
+if (typeof ResizeObserver === "function") {
+  const resizeObserver = new ResizeObserver(() => {
+    scheduleHeightUpdate();
+  });
+  if (heightObserverTarget) {
+    resizeObserver.observe(heightObserverTarget);
+  }
+} else if (heightObserverTarget) {
+  new MutationObserver(scheduleHeightUpdate).observe(heightObserverTarget, {
+    childList: true,
+    subtree: true,
+  });
+}
 
 // На всякий случай — повторно через 1 секунду (для динамических графиков/загрузок)
 setTimeout(sendHeight, 1000);

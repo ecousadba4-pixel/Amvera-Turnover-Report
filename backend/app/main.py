@@ -312,7 +312,6 @@ async def services(
     _: str = Depends(require_admin_auth),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
-    date_field: DateField = Query(default=DateField.created),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1000),
 ) -> ServicesResponse:
