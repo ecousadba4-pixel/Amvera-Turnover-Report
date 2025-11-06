@@ -10,7 +10,6 @@ services:
       - ADMIN_PASSWORD_SHA256
       - CORS_ALLOW_ORIGINS
       - PORT
-      - READ_ONLY
 routes:
   - name: public
     service: api

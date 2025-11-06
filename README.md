@@ -10,7 +10,6 @@
 - `ADMIN_PASSWORD_SHA256=<hex>`
 - `CORS_ALLOW_ORIGINS=https://usadba4.ru,https://*.flexbe.com,https://*.flexbe.site`
 - `PORT=8000` (optional)
-- `READ_ONLY=false` (optional)
 
 ## Frontend (Flexbe HTML block)
 - Single file: `frontend/revenue_dashboard.html`

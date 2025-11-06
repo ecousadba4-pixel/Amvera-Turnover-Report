@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     admin_password_sha256: str  # hex string
     cors_allow_origins: str = ""  # comma-separated list of origins
     port: int = 8000
-    read_only: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="",
