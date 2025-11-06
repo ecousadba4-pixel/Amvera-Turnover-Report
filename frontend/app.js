@@ -704,7 +704,7 @@ function resetMonthlyDetails() {
   clearMonthlyRows();
   showMonthlyMessage(MONTHLY_INITIAL_MESSAGE);
   if (monthlyCard) {
-    monthlyCard.classList.add("hidden");
+    monthlyCard.classList.remove("hidden");
   }
   if (monthlyTitle) {
     monthlyTitle.textContent = MONTHLY_DEFAULT_TITLE;

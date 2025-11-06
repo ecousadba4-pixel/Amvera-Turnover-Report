@@ -454,6 +454,11 @@ h2 {
   gap: 1.5rem;
 }
 
+.monthly-card:hover {
+  transform: none;
+  box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
+}
+
 .monthly-header {
   display: flex;
   flex-wrap: wrap;
