@@ -37,7 +37,7 @@ export function initializeMonthly() {
 export function resetMonthlyDetails() {
   resetMonthlyState();
   clearActiveServiceRow();
-  setActiveMonthlyRangeButton(state.activeMonthlyRange);
+  updateMonthlyRange(state.activeMonthlyRange);
   summaryCards.forEach((card) => card.classList.remove("is-active"));
   clearMonthlyRows();
   showMonthlyMessage(MONTHLY_INITIAL_MESSAGE);
@@ -81,16 +81,14 @@ export function handleServiceNameClick(row, serviceType) {
   summaryCards.forEach((card) => card.classList.remove("is-active"));
   setActiveServiceRowElement(row);
 
-  state.activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
-  setActiveMonthlyRangeButton(state.activeMonthlyRange);
+  updateMonthlyRange(MONTHLY_RANGE_DEFAULT);
 
   if (elements.monthlyTitle) {
     elements.monthlyTitle.textContent = normalizedService;
   }
   elements.monthlyCard?.classList.remove("hidden");
 
-  showMonthlyMessage("Загрузка...");
-  clearMonthlyRows();
+  prepareMonthlyDataLoad();
   loadMonthlyService(normalizedService, state.activeMonthlyRange);
 }
 
@@ -128,18 +126,15 @@ function bindMonthlyRangeSwitch() {
       if (!monthlyRange || monthlyRange === state.activeMonthlyRange) {
         return;
       }
-      state.activeMonthlyRange = monthlyRange;
-      setActiveMonthlyRangeButton(state.activeMonthlyRange);
+      updateMonthlyRange(monthlyRange);
       if (state.activeMonthlyContext === MONTHLY_CONTEXT_METRIC && state.activeMonthlyMetric) {
-        showMonthlyMessage("Загрузка...");
-        clearMonthlyRows();
+        prepareMonthlyDataLoad();
         loadMonthlyMetric(state.activeMonthlyMetric, state.activeMonthlyRange);
       } else if (
         state.activeMonthlyContext === MONTHLY_CONTEXT_SERVICE &&
         state.activeMonthlyService
       ) {
-        showMonthlyMessage("Загрузка...");
-        clearMonthlyRows();
+        prepareMonthlyDataLoad();
         loadMonthlyService(state.activeMonthlyService, state.activeMonthlyRange);
       }
     });
@@ -172,16 +167,14 @@ function handleSummaryCardClick(card, metric) {
   clearActiveServiceRow();
 
   state.activeMonthlyMetric = metric;
-  state.activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
-  setActiveMonthlyRangeButton(state.activeMonthlyRange);
+  updateMonthlyRange(MONTHLY_RANGE_DEFAULT);
 
   if (elements.monthlyTitle) {
     elements.monthlyTitle.textContent = MONTHLY_METRIC_CONFIG[metric].label;
   }
   elements.monthlyCard?.classList.remove("hidden");
 
-  showMonthlyMessage("Загрузка...");
-  clearMonthlyRows();
+  prepareMonthlyDataLoad();
   loadMonthlyMetric(metric, state.activeMonthlyRange);
 }
 
@@ -210,6 +203,39 @@ function clearMonthlyRows() {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function createMonthlyRowMarkup({ monthLabel, valueLabel, isTotal = false }) {
+  const rowClasses = ["monthly-row"];
+  const monthClasses = ["monthly-row__month"];
+  const valueClasses = ["monthly-row__value"];
+
+  if (isTotal) {
+    rowClasses.push("monthly-row--total");
+    monthClasses.push("monthly-row__month--total");
+    valueClasses.push("monthly-row__value--total");
+  }
+
+  return `<div class="${rowClasses.join(" ")}"><div class="${monthClasses.join(" ")}">${escapeHtml(monthLabel)}</div><div class="${valueClasses.join(" ")}">${escapeHtml(valueLabel)}</div></div>`;
+}
+
+function prepareMonthlyDataLoad(message = "Загрузка...") {
+  showMonthlyMessage(message);
+  clearMonthlyRows();
+}
+
+function updateMonthlyRange(range) {
+  state.activeMonthlyRange = range;
+  setActiveMonthlyRangeButton(range);
+}
+
 function renderMonthlySeries(points, aggregateValue, formatValue) {
   if (!elements.monthlyTable || !elements.monthlyEmpty || !elements.monthlyRows) {
     return;
@@ -225,44 +251,37 @@ function renderMonthlySeries(points, aggregateValue, formatValue) {
   elements.monthlyTable.classList.remove("hidden");
   clearMonthlyRows();
 
-  const fragment = document.createDocumentFragment();
+  const sortedPoints = safePoints
+    .map((point) => {
+      const timestamp = typeof point?.month === "string" ? Date.parse(point.month) : NaN;
+      return {
+        point,
+        timestamp: Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY,
+      };
+    })
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .map((item) => item.point);
 
-  const sortedPoints = safePoints.sort((a, b) => new Date(b.month) - new Date(a.month));
-
-  sortedPoints.forEach((point) => {
-    const row = document.createElement("div");
-    row.className = "monthly-row";
-
-    const monthEl = document.createElement("div");
-    monthEl.className = "monthly-row__month";
-    monthEl.textContent = formatMonthLabel(point.month);
-
-    const valueEl = document.createElement("div");
-    valueEl.className = "monthly-row__value";
-    const numericValue = toNumber(point?.value);
-    valueEl.textContent = formatValue(numericValue);
-
-    row.append(monthEl, valueEl);
-    fragment.append(row);
-  });
+  let rowsMarkup = sortedPoints
+    .map((point) => {
+      const monthLabel = formatMonthLabel(point.month);
+      const numericValue = toNumber(point?.value);
+      return createMonthlyRowMarkup({
+        monthLabel,
+        valueLabel: formatValue(numericValue),
+      });
+    })
+    .join("");
 
   if (aggregateValue !== null && aggregateValue !== undefined) {
-    const totalRow = document.createElement("div");
-    totalRow.className = "monthly-row monthly-row--total";
-
-    const totalLabel = document.createElement("div");
-    totalLabel.className = "monthly-row__month monthly-row__month--total";
-    totalLabel.textContent = "Итого";
-
-    const totalValue = document.createElement("div");
-    totalValue.className = "monthly-row__value monthly-row__value--total";
-    totalValue.textContent = formatValue(toNumber(aggregateValue));
-
-    totalRow.append(totalLabel, totalValue);
-    fragment.append(totalRow);
+    rowsMarkup += createMonthlyRowMarkup({
+      monthLabel: "Итого",
+      valueLabel: formatValue(toNumber(aggregateValue)),
+      isTotal: true,
+    });
   }
 
-  elements.monthlyRows.append(fragment);
+  elements.monthlyRows.innerHTML = rowsMarkup;
   scheduleHeightUpdate();
 }
 
