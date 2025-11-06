@@ -1,8 +1,8 @@
-name: Deploy frontend to GitHub Pages (minify + cache-bust)
+name: Deploy frontend to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'frontend/**'
 
@@ -30,8 +30,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Build: copy, minify, rewrite
-        shell: bash
+      - name: Build site (copy + minify + rewrite)
         run: |
           set -euo pipefail
 
@@ -40,19 +39,18 @@ jobs:
           cp -r frontend/* site/frontend/
           touch site/.nojekyll
 
-          # version
+          # version for cache-busting
           VER="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::8}"
           echo "Using version: $VER"
 
-          HTML="site/frontend/revenue_dashboard.html"
-
-          # minify
+          # minify css/js
           npx --yes clean-css-cli -o site/frontend/styles.min.css frontend/styles.css
           npx --yes esbuild frontend/app.js --minify --outfile=site/frontend/app.min.js
 
           # rewrite links in HTML -> *.min + ?v=<VER>
-          perl -0777 -pe "s/href=(\"|')styles\\.css\\1/href=\\1styles.min.css?v=${VER}\\1/g" -i "$HTML"
-          perl -0777 -pe "s/src=(\"|')app\\.js\\1/src=\\1app.min.js?v=${VER}\\1/g" -i "$HTML"
+          HTML="site/frontend/revenue_dashboard.html"
+          perl -0777 -pe "s/href=(\"|')styles\.css\1/href=\$1styles.min.css?v=${VER}\$1/g" -i "$HTML"
+          perl -0777 -pe "s/src=(\"|')app\.js\1/src=\$1app.min.js?v=${VER}\$1/g" -i "$HTML"
 
           # version.json for loader.html
           printf '{"version":"%s"}\n' "$VER" > site/frontend/version.json
@@ -70,5 +68,3 @@ jobs:
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-
