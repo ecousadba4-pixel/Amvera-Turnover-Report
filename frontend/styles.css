@@ -528,10 +528,21 @@ h2 {
   border-bottom: none;
 }
 
+.monthly-row--total {
+  margin-top: 0.4rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(138, 157, 76, 0.25);
+  border-bottom: none;
+}
+
 .monthly-row__month {
   font-weight: 600;
   color: var(--text-primary);
   flex: 1 1 auto;
+}
+
+.monthly-row__month--total {
+  font-weight: 700;
 }
 
 .monthly-row__value {
@@ -540,6 +551,10 @@ h2 {
   white-space: nowrap;
   flex: 0 0 auto;
   text-align: right;
+}
+
+.monthly-row__value--total {
+  color: var(--accent-primary);
 }
 
 .services-header {
