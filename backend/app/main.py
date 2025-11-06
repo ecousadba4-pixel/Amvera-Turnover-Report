@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import re
 
+from urllib.parse import urlsplit, urlunsplit
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -48,6 +50,29 @@ def _configure_cors(app: FastAPI) -> None:
     allow_all_origins = not raw_origins or any(origin == "*" for origin in raw_origins)
     allow_origin_regex = None
     configured_origins: list[str] = []
+    configured_origin_set: set[str] = set()
+
+    def _add_configured_origin(value: str) -> None:
+        if value and value not in configured_origin_set:
+            configured_origin_set.add(value)
+            configured_origins.append(value)
+
+    def _maybe_www_variant(origin: str) -> str:
+        try:
+            parsed = urlsplit(origin)
+        except ValueError:
+            return ""
+
+        if not parsed.scheme or not parsed.hostname:
+            return ""
+
+        hostname = parsed.hostname
+        if hostname.startswith("www."):
+            return ""
+
+        port = f":{parsed.port}" if parsed.port else ""
+        netloc = f"www.{hostname}{port}"
+        return urlunsplit((parsed.scheme, netloc, "", "", ""))
 
     if allow_all_origins:
         configured_origins = ["*"]
@@ -57,7 +82,10 @@ def _configure_cors(app: FastAPI) -> None:
             if "*" in origin:
                 wildcard_patterns.append(_cors_pattern_to_regex(origin))
             else:
-                configured_origins.append(origin)
+                _add_configured_origin(origin)
+                www_variant = _maybe_www_variant(origin)
+                if www_variant:
+                    _add_configured_origin(www_variant)
 
         if wildcard_patterns:
             allow_origin_regex = "|".join(wildcard_patterns)
@@ -74,6 +102,8 @@ def _configure_cors(app: FastAPI) -> None:
 
 def _cors_pattern_to_regex(pattern: str) -> str:
     escaped = re.escape(pattern)
+    # Разрешаем опциональный поддомен, если шаблон содержит "*." (например, https://*.example.com)
+    escaped = re.sub(r"\\\*\\.", r"(?:[^/.]+\\.)?", escaped)
     return "^" + escaped.replace("\\*", "[^/]*") + "$"
 
 
