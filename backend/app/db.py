@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Tuple, TypeVar
 
 import psycopg
 from psycopg.rows import dict_row
@@ -42,6 +42,16 @@ async def _get_or_create_pool(dsn: str) -> AsyncConnectionPool:
     return pool
 
 
+async def _reset_pool(dsn: str) -> None:
+    """Close and drop the cached pool for the given DSN if it exists."""
+
+    async with _pool_lock:
+        pool = _pools.pop(dsn, None)
+
+    if pool is not None:
+        await pool.close()
+
+
 @asynccontextmanager
 async def get_conn(dsn: str) -> AsyncIterator[psycopg.AsyncConnection]:
     """Yield a pooled async connection configured to return dict rows."""
@@ -49,6 +59,72 @@ async def get_conn(dsn: str) -> AsyncIterator[psycopg.AsyncConnection]:
     pool = await _get_or_create_pool(dsn)
     async with pool.connection() as conn:
         yield conn
+
+
+TResult = TypeVar("TResult")
+_RETRYABLE_EXCEPTIONS: Tuple[type[Exception], ...] = (
+    psycopg.OperationalError,
+    psycopg.InterfaceError,
+)
+
+
+async def _run_with_retry(
+    dsn: str,
+    operation: Callable[[psycopg.AsyncConnection], Awaitable[TResult]],
+    *,
+    retries: int = 1,
+) -> TResult:
+    """Execute the given operation, retrying once on transient connection errors."""
+
+    attempt = 0
+    while True:
+        try:
+            async with get_conn(dsn) as conn:
+                return await operation(conn)
+        except _RETRYABLE_EXCEPTIONS:
+            attempt += 1
+            if attempt > retries:
+                raise
+            await _reset_pool(dsn)
+
+
+async def fetchone(
+    dsn: str,
+    query: psycopg.sql.Composable | str,
+    params: Optional[dict[str, Any]] = None,
+    *,
+    retries: int = 1,
+) -> Optional[dict[str, Any]]:
+    """Execute a query and return the first row, retrying on connection failures."""
+
+    params = params or {}
+
+    async def _operation(conn: psycopg.AsyncConnection) -> Optional[dict[str, Any]]:
+        async with conn.cursor() as cur:
+            await cur.execute(query, params)
+            return await cur.fetchone()
+
+    return await _run_with_retry(dsn, _operation, retries=retries)
+
+
+async def fetchall(
+    dsn: str,
+    query: psycopg.sql.Composable | str,
+    params: Optional[dict[str, Any]] = None,
+    *,
+    retries: int = 1,
+) -> list[dict[str, Any]]:
+    """Execute a query and return all rows, retrying on connection failures."""
+
+    params = params or {}
+
+    async def _operation(conn: psycopg.AsyncConnection) -> list[dict[str, Any]]:
+        async with conn.cursor() as cur:
+            await cur.execute(query, params)
+            rows = await cur.fetchall()
+            return list(rows or [])
+
+    return await _run_with_retry(dsn, _operation, retries=retries)
 
 
 async def close_all_pools() -> None:

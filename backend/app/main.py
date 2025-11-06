@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.db import close_all_pools, get_conn
+from app.db import close_all_pools, fetchall, fetchone
 from app.settings import get_settings
 from psycopg import sql
 
@@ -266,10 +266,7 @@ async def metrics(
     """
     ).format(filters=filters, services_filters=services_filters)
 
-    async with get_conn(dsn) as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(query, params)
-            row = await cur.fetchone() or {}
+    row = await fetchone(dsn, query, params) or {}
 
     count = int(row.get("bookings_count", 0))
     lvl2p = int(row.get("lvl2p", 0))
@@ -376,10 +373,7 @@ async def services(
 
     query_params = {**params, "limit": page_size, "offset": offset}
 
-    async with get_conn(dsn) as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(query, query_params)
-            rows = await cur.fetchall() or []
+    rows = await fetchall(dsn, query, query_params) or []
 
     summary_row: dict[str, object] = {}
     raw_items: list[dict[str, object]] = []
@@ -516,10 +510,7 @@ async def metrics_monthly(
     )
 
     dsn = settings.database_url
-    async with get_conn(dsn) as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(query, query_params)
-            rows = await cur.fetchall() or []
+    rows = await fetchall(dsn, query, query_params) or []
 
     points: list[MonthlyMetricPoint] = []
 
