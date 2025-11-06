@@ -67,29 +67,19 @@ class MonthlyServiceRecord:
 
 
 def _as_int(value: object) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
+    return int(value) if value is not None else 0
 
 
 def _as_optional_float(value: object) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    return float(value) if value is not None else None
 
 
 def _coerce_date(value: object) -> Optional[date]:
     if isinstance(value, date):
         return value
-    if hasattr(value, "date"):
-        try:
-            result = value.date()  # type: ignore[call-arg]
-        except Exception:  # pragma: no cover - защитный fallback
-            return None
+    date_method = getattr(value, "date", None)
+    if callable(date_method):
+        result = date_method()  # type: ignore[misc]
         return result if isinstance(result, date) else None
     return None
 
