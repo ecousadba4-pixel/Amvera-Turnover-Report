@@ -36,7 +36,6 @@ class DateField(str, Enum):
     created = "created"
     checkin = "checkin"
 
-
 class MetricsResponse(BaseModel):
     used_field: str
     used_reason: str
