@@ -35,6 +35,22 @@ function resolveApiBase() {
 }
 
 const API_BASE = resolveApiBase();
+const API_BASE_ERROR_MESSAGE = "Базовый URL API не сконфигурирован";
+
+function ensureApiBase() {
+  if (API_BASE) {
+    return API_BASE;
+  }
+  console.error(API_BASE_ERROR_MESSAGE);
+  return "";
+}
+
+function requireApiBase() {
+  if (API_BASE) {
+    return API_BASE;
+  }
+  throw new Error(API_BASE_ERROR_MESSAGE);
+}
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -342,10 +358,11 @@ async function requestWithDateFieldFallback({
   signal,
   headers,
 }) {
+  const baseUrl = requireApiBase();
   if (!includeDateField) {
     const params = cloneSearchParams(baseParams);
     const queryString = params.toString();
-    const url = `${API_BASE}${path}${queryString ? `?${queryString}` : ""}`;
+    const url = `${baseUrl}${path}${queryString ? `?${queryString}` : ""}`;
     const resp = await fetch(url, { headers, signal });
     if (!resp.ok) {
       throw await buildHttpError(resp);
@@ -364,7 +381,7 @@ async function requestWithDateFieldFallback({
       params.set("date_field", candidate);
     }
     const queryString = params.toString();
-    const url = `${API_BASE}${path}${queryString ? `?${queryString}` : ""}`;
+    const url = `${baseUrl}${path}${queryString ? `?${queryString}` : ""}`;
 
     let resp;
     try {
@@ -953,10 +970,6 @@ async function loadMonthlyMetric(metric, range) {
   if (!ensureAuthSession()) {
     return false;
   }
-  if (!API_BASE) {
-    console.error("Базовый URL API не сконфигурирован");
-    return false;
-  }
 
   const cacheKey = getMonthlyCacheKey(metric, range);
   const cached = getCachedResponse(cacheKey);
@@ -1004,8 +1017,8 @@ async function loadMonthlyService(serviceType, range) {
   if (!ensureAuthSession()) {
     return false;
   }
-  if (!API_BASE) {
-    console.error("Базовый URL API не сконфигурирован");
+  const baseUrl = ensureApiBase();
+  if (!baseUrl) {
     return false;
   }
 
@@ -1031,7 +1044,7 @@ async function loadMonthlyService(serviceType, range) {
     range,
   });
 
-  const url = `${API_BASE}/api/services/monthly?${params.toString()}`;
+  const url = `${baseUrl}/api/services/monthly?${params.toString()}`;
 
   try {
     const resp = await fetch(url, {
@@ -1441,10 +1454,6 @@ async function loadMetrics({
   if (!ensureAuthSession()) {
     return false;
   }
-  if (!API_BASE) {
-    console.error("Базовый URL API не сконфигурирован");
-    return false;
-  }
 
   const fromValue = fromDate.value;
   const toValue = toDate.value;
@@ -1693,12 +1702,10 @@ function bindSectionSwitch() {
 }
 
 async function authenticate(password) {
-  if (!API_BASE) {
-    throw new Error("Базовый URL API не сконфигурирован");
-  }
+  const baseUrl = requireApiBase();
 
   try {
-    const resp = await fetch(`${API_BASE}/api/auth/login`, {
+    const resp = await fetch(`${baseUrl}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
