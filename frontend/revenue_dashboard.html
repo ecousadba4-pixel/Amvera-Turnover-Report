@@ -112,37 +112,37 @@
           <div class="services-empty">Выберите период, чтобы увидеть данные</div>
         </div>
       </div>
-    </div>
-    <div class="card monthly-card hidden" id="monthlyDetails" aria-live="polite">
-      <div class="monthly-header">
-        <div class="monthly-title" id="monthlyTitle">Помесячная динамика</div>
-        <div class="monthly-range" role="radiogroup" aria-label="Выбор периода">
-          <button
-            type="button"
-            class="monthly-range__btn is-active"
-            data-monthly-range="this_year"
-            aria-pressed="true"
-          >
-            Этот год
-          </button>
-          <button
-            type="button"
-            class="monthly-range__btn"
-            data-monthly-range="last_12_months"
-            aria-pressed="false"
-          >
-            Последние 12 месяцев
-          </button>
-        </div>
-      </div>
-      <div class="monthly-body">
-        <div class="monthly-empty" id="monthlyEmpty">Выберите показатель, чтобы увидеть динамику</div>
-        <div class="monthly-table hidden" id="monthlyTable">
-          <div class="monthly-table__header">
-            <div>Месяц</div>
-            <div>Значение</div>
+      <div class="card monthly-card hidden" id="monthlyDetails" aria-live="polite">
+        <div class="monthly-header">
+          <div class="monthly-title" id="monthlyTitle">Помесячная динамика</div>
+          <div class="monthly-range" role="radiogroup" aria-label="Выбор периода">
+            <button
+              type="button"
+              class="monthly-range__btn is-active"
+              data-monthly-range="this_year"
+              aria-pressed="true"
+            >
+              Этот год
+            </button>
+            <button
+              type="button"
+              class="monthly-range__btn"
+              data-monthly-range="last_12_months"
+              aria-pressed="false"
+            >
+              Последние 12 месяцев
+            </button>
           </div>
-          <div class="monthly-table__rows" id="monthlyRows"></div>
+        </div>
+        <div class="monthly-body">
+          <div class="monthly-empty" id="monthlyEmpty">Выберите показатель, чтобы увидеть динамику</div>
+          <div class="monthly-table hidden" id="monthlyTable">
+            <div class="monthly-table__header">
+              <div>Месяц</div>
+              <div>Значение</div>
+            </div>
+            <div class="monthly-table__rows" id="monthlyRows"></div>
+          </div>
         </div>
       </div>
     </div>

@@ -474,7 +474,7 @@ h2 {
 
 .monthly-range__btn {
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: 16px;
   background: transparent;
   color: var(--text-secondary);
   font-weight: 600;
@@ -913,6 +913,11 @@ body.is-loading .summary-value::after {
   .services-card {
     grid-column: 2;
     grid-row: 2;
+  }
+
+  .monthly-card {
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
 
   .analytics-card .section-switch {
