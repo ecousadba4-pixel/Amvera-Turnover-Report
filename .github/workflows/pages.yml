@@ -1,4 +1,4 @@
-name: Deploy repo (keep /frontend path) to GitHub Pages
+name: Deploy repo (keep /frontend path) to GitHub Pages (minify + cache-bust)
 
 on:
   push:
@@ -23,42 +23,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Клонируем репозиторий
+      # 1) Репо
       - uses: actions/checkout@v4
 
-      # 2. Подготавливаем артефакт для Pages
-      - name: Prepare artifact
+      # 2) Node для минификации
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3) Готовим артефакт и минифицируем
+      - name: Build: copy, minify, rewrite
         run: |
-          # Создаем структуру публикации
+          set -e
+
+          # Копируем исходники фронта
           mkdir -p site/frontend
           cp -r frontend/* site/frontend/
           touch site/.nojekyll
 
-          # Генерируем версию (таймстемп + короткий SHA)
+          # Версия для кэш-бастинга
           VER="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::8}"
           echo "Using version: $VER"
 
-          # Указываем путь к основному HTML
           HTML="site/frontend/revenue_dashboard.html"
 
-          # Добавляем параметр версии в CSS и JS для кэш-бастинга
-          perl -0777 -pe "s/href=(\"|')styles\\.css\\1/href=\\1styles.css?v=${VER}\\1/g" -i "$HTML"
-          perl -0777 -pe "s/src=(\"|')app\\.js\\1/src=\\1app.js?v=${VER}\\1/g" -i "$HTML"
+          # ---- Минификация ----
+          # CSS -> styles.min.css (clean-css-cli)
+          npx --yes clean-css-cli -o site/frontend/styles.min.css frontend/styles.css
 
-          # Создаем version.json для loader.html
+          # JS -> app.min.js (esbuild)
+          # Если у тебя ES-модуль, можно добавить: --format=esm
+          npx --yes esbuild frontend/app.js --minify --outfile=site/frontend/app.min.js
+
+          # ---- Переписываем ссылки в HTML на *.min + ?v= ----
+          perl -0777 -pe "s/href=(\"|')styles\\.css\\1/href=\\1styles.min.css?v=${VER}\\1/g" -i "$HTML"
+          perl -0777 -pe "s/src=(\"|')app\\.js\\1/src=\\1app.min.js?v=${VER}\\1/g" -i "$HTML"
+
+          # ---- Версия для loader.html ----
           echo "{\"version\":\"$VER\"}" > site/frontend/version.json
 
-          # Контроль в логах
-          echo "----- HTML (первые строки) -----"
-          head -n 10 "$HTML" || true
+          echo "----- HTML (first lines) -----"
+          head -n 12 "$HTML" || true
           echo "----- version.json -----"
           cat site/frontend/version.json
 
-      # 3. Загружаем артефакт для публикации
+      # 4) Публикация
       - uses: actions/upload-pages-artifact@v3
         with:
           path: 'site'
 
-      # 4. Публикуем на GitHub Pages
       - id: deployment
         uses: actions/deploy-pages@v4
+
