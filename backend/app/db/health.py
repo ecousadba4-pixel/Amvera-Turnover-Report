@@ -21,7 +21,7 @@ async def check_database(dsn: str, *, timeout: float = _DEFAULT_TIMEOUT_SECONDS)
     """
 
     try:
-        await asyncio.wait_for(fetchone(dsn, "SELECT 1"), timeout=timeout)
+        await asyncio.wait_for(fetchone("SELECT 1", dsn=dsn), timeout=timeout)
     except asyncio.TimeoutError:
         return False, "Timed out while connecting to the database"
     except PsycopgError as exc:

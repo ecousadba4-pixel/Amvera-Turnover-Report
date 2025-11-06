@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Tuple, TypeVar
 
 import psycopg
@@ -13,10 +14,14 @@ __all__ = [
     "fetchall",
     "get_conn",
     "close_all_pools",
+    "use_database",
 ]
 
 _pool_lock = asyncio.Lock()
 _pools: Dict[str, AsyncConnectionPool] = {}
+
+
+_current_dsn: ContextVar[Optional[str]] = ContextVar("current_db_dsn", default=None)
 
 
 _POOL_CONFIG = {
@@ -60,11 +65,28 @@ async def _reset_pool(dsn: str) -> None:
         await pool.close()
 
 
+def _resolve_dsn(dsn: Optional[str]) -> str:
+    current = dsn if dsn else _current_dsn.get()
+    if not current:
+        raise RuntimeError("Database DSN is not configured for the current context")
+    return current
+
+
 @asynccontextmanager
-async def get_conn(dsn: str) -> AsyncIterator[psycopg.AsyncConnection]:
+async def use_database(dsn: str) -> AsyncIterator[None]:
+    token = _current_dsn.set(dsn)
+    try:
+        yield
+    finally:
+        _current_dsn.reset(token)
+
+
+@asynccontextmanager
+async def get_conn(dsn: Optional[str] = None) -> AsyncIterator[psycopg.AsyncConnection]:
     """Yield a pooled async connection configured to return dict rows."""
 
-    pool = await _get_or_create_pool(dsn)
+    resolved_dsn = _resolve_dsn(dsn)
+    pool = await _get_or_create_pool(resolved_dsn)
     async with pool.connection() as conn:
         yield conn
 
@@ -77,30 +99,31 @@ _RETRYABLE_EXCEPTIONS: Tuple[type[Exception], ...] = (
 
 
 async def _run_with_retry(
-    dsn: str,
+    dsn: Optional[str],
     operation: Callable[[psycopg.AsyncConnection], Awaitable[TResult]],
     *,
     retries: int = 1,
 ) -> TResult:
     """Execute the given operation, retrying once on transient connection errors."""
 
+    resolved_dsn = _resolve_dsn(dsn)
     attempt = 0
     while True:
         try:
-            async with get_conn(dsn) as conn:
+            async with get_conn(resolved_dsn) as conn:
                 return await operation(conn)
         except _RETRYABLE_EXCEPTIONS:
             attempt += 1
             if attempt > retries:
                 raise
-            await _reset_pool(dsn)
+            await _reset_pool(resolved_dsn)
 
 
 async def fetchone(
-    dsn: str,
     query: psycopg.sql.Composable | str,
     params: Optional[dict[str, Any]] = None,
     *,
+    dsn: Optional[str] = None,
     retries: int = 1,
 ) -> Optional[dict[str, Any]]:
     """Execute a query and return the first row, retrying on connection failures."""
@@ -116,10 +139,10 @@ async def fetchone(
 
 
 async def fetchall(
-    dsn: str,
     query: psycopg.sql.Composable | str,
     params: Optional[dict[str, Any]] = None,
     *,
+    dsn: Optional[str] = None,
     retries: int = 1,
 ) -> list[dict[str, Any]]:
     """Execute a query and return all rows, retrying on connection failures."""

@@ -101,7 +101,6 @@ def _normalize_service_type(raw: object) -> str:
 
 async def fetch_metrics_summary(
     *,
-    dsn: str,
     date_from: Optional[date],
     date_to: Optional[date],
     date_field: DateField,
@@ -118,7 +117,7 @@ async def fetch_metrics_summary(
         services_filters=services_filters,
     )
 
-    row = await fetchone(dsn, query, params) or {}
+    row = await fetchone(query, params) or {}
     return MetricsSummaryRecord(
         bookings_count=_as_int(row.get("bookings_count")),
         lvl2p=_as_int(row.get("lvl2p")),
@@ -134,7 +133,6 @@ async def fetch_metrics_summary(
 
 async def fetch_services_listing(
     *,
-    dsn: str,
     date_from: Optional[date],
     date_to: Optional[date],
     page: int,
@@ -146,7 +144,7 @@ async def fetch_services_listing(
     offset = (page - 1) * page_size
     query = load_query("services_listing.sql").format(filters=filters)
     query_params = {**params, "limit": page_size, "offset": offset}
-    rows = await fetchall(dsn, query, query_params) or []
+    rows = await fetchall(query, query_params) or []
 
     summary_row: Mapping[str, object] = {}
     items: list[ServiceUsageRecord] = []
@@ -169,7 +167,6 @@ async def fetch_services_listing(
 
 async def fetch_monthly_metric_rows(
     *,
-    dsn: str,
     range_: MonthlyRange,
     date_field: DateField,
 ) -> Sequence[MonthlyMetricRecord]:
@@ -203,7 +200,7 @@ async def fetch_monthly_metric_rows(
         services_filters=services_filters,
     )
 
-    rows = await fetchall(dsn, query, query_params) or []
+    rows = await fetchall(query, query_params) or []
     result: list[MonthlyMetricRecord] = []
     for row in rows:
         month_start = _coerce_date(row.get("month_start"))
@@ -229,7 +226,6 @@ async def fetch_monthly_metric_rows(
 
 async def fetch_monthly_service_rows(
     *,
-    dsn: str,
     service_type: str,
     range_: MonthlyRange,
 ) -> Sequence[MonthlyServiceRecord]:
@@ -260,7 +256,7 @@ async def fetch_monthly_service_rows(
         service_filter=service_clause,
     )
 
-    rows = await fetchall(dsn, query, params) or []
+    rows = await fetchall(query, params) or []
     result: list[MonthlyServiceRecord] = []
     for row in rows:
         month_start = _coerce_date(row.get("month_start"))

@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.dependencies import DatabaseDsn, require_admin_auth
+from app.api.dependencies import DatabaseSession, require_admin_auth
 from app.schemas.enums import MonthlyRange
 from app.schemas.responses import MonthlyServiceResponse, ServicesResponse
 from app.services.metrics import get_monthly_services, get_services
@@ -15,8 +15,8 @@ router = APIRouter(prefix="/api/services", tags=["services"])
 
 @router.get("", response_model=ServicesResponse)
 async def services(
-    dsn: DatabaseDsn,
-    _: str = Depends(require_admin_auth),
+    _db: DatabaseSession,
+    _auth: str = Depends(require_admin_auth),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     page: int = Query(1, ge=1),
@@ -27,19 +27,18 @@ async def services(
         date_to=date_to,
         page=page,
         page_size=page_size,
-        dsn=dsn,
     )
 
 
 @router.get("/monthly", response_model=MonthlyServiceResponse)
 async def services_monthly(
-    dsn: DatabaseDsn,
-    _: str = Depends(require_admin_auth),
+    _db: DatabaseSession,
+    _auth: str = Depends(require_admin_auth),
     service_type: str = Query(..., min_length=1),
     range_: MonthlyRange = Query(default=MonthlyRange.this_year, alias="range"),
 ) -> MonthlyServiceResponse:
     try:
-        return await get_monthly_services(service_type=service_type, range_=range_, dsn=dsn)
+        return await get_monthly_services(service_type=service_type, range_=range_)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
