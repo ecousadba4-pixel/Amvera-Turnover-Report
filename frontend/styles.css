@@ -798,7 +798,7 @@ body.is-loading .summary-value::after {
   }
 
   .filter-card {
-    padding: 1rem 1.05rem;
+    padding: 1.25rem 1.35rem;
   }
 
   .filter-card .card-header {
