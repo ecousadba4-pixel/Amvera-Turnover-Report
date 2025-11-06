@@ -29,17 +29,13 @@ from app.schemas.responses import (
 from app.settings import get_settings
 
 
-class InvalidDateRangeError(ValueError):
-    """Raised when the requested date range is invalid."""
-
-
 async def get_metrics(
     *,
     date_from: Optional[date],
     date_to: Optional[date],
     date_field: DateField,
 ) -> MetricsResponse:
-    _ensure_valid_date_range(date_from, date_to)
+    date_from, date_to = _normalize_date_range(date_from, date_to)
 
     settings = get_settings()
     dsn = settings.database_url
@@ -91,7 +87,7 @@ async def get_services(
     page: int,
     page_size: int,
 ) -> ServicesResponse:
-    _ensure_valid_date_range(date_from, date_to)
+    date_from, date_to = _normalize_date_range(date_from, date_to)
 
     settings = get_settings()
     dsn = settings.database_url
@@ -345,9 +341,12 @@ async def get_monthly_services(
     )
 
 
-def _ensure_valid_date_range(date_from: Optional[date], date_to: Optional[date]) -> None:
+def _normalize_date_range(
+    date_from: Optional[date], date_to: Optional[date]
+) -> tuple[Optional[date], Optional[date]]:
     if date_from and date_to and date_from > date_to:
-        raise InvalidDateRangeError("date_from must be before or equal to date_to")
+        return date_to, date_from
+    return date_from, date_to
 
 
 def _resolve_monthly_value(
@@ -438,7 +437,6 @@ def _calculate_monthly_aggregate(
 
 
 __all__ = [
-    "InvalidDateRangeError",
     "get_metrics",
     "get_services",
     "get_monthly_metrics",
