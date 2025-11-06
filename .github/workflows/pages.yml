@@ -21,29 +21,44 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
+      # 1. Клонируем репозиторий
       - uses: actions/checkout@v4
 
+      # 2. Подготавливаем артефакт для Pages
       - name: Prepare artifact
         run: |
-          # Копируем фронтенд в артефакт для Pages
+          # Создаем структуру публикации
           mkdir -p site/frontend
           cp -r frontend/* site/frontend/
-
-          # Отключаем Jekyll
           touch site/.nojekyll
 
-          # Версия для кэш-бастинга (таймстемп + короткий SHA)
+          # Генерируем версию (таймстемп + короткий SHA)
           VER="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::8}"
           echo "Using version: $VER"
 
-          # Подставляем ?v=<версия> для CSS/JS в твоём HTML
-          sed -i "s#href=\"styles.css\"#href=\"styles.css?v=${VER}\"#g" site/frontend/revenue_dashboard.html
-          sed -i "s#src=\"app.js\"#src=\"app.js?v=${VER}\"#g"         site/frontend/revenue_dashboard.html
+          # Указываем путь к основному HTML
+          HTML="site/frontend/revenue_dashboard.html"
 
+          # Добавляем параметр версии в CSS и JS для кэш-бастинга
+          perl -0777 -pe "s/href=(\"|')styles\\.css\\1/href=\\1styles.css?v=${VER}\\1/g" -i "$HTML"
+          perl -0777 -pe "s/src=(\"|')app\\.js\\1/src=\\1app.js?v=${VER}\\1/g" -i "$HTML"
+
+          # Создаем version.json для loader.html
+          echo "{\"version\":\"$VER\"}" > site/frontend/version.json
+
+          # Контроль в логах
+          echo "----- HTML (первые строки) -----"
+          head -n 10 "$HTML" || true
+          echo "----- version.json -----"
+          cat site/frontend/version.json
+
+      # 3. Загружаем артефакт для публикации
       - uses: actions/upload-pages-artifact@v3
         with:
           path: 'site'
 
+      # 4. Публикуем на GitHub Pages
       - id: deployment
         uses: actions/deploy-pages@v4
