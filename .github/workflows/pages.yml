@@ -1,8 +1,8 @@
-name: Deploy frontend to GitHub Pages
+name: Deploy frontend to GitHub Pages (minify + cache-bust)
 
 on:
   push:
-    branches: [main]
+    branches: ['main']
     paths:
       - 'frontend/**'
 
@@ -12,7 +12,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: 'pages'
   cancel-in-progress: true
 
 jobs:
@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -28,13 +29,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
       - name: Build site (copy + minify + rewrite)
+        shell: bash
         run: |
           set -euo pipefail
 
-          # copy sources
+          # copy sources for Pages
           mkdir -p site/frontend
           cp -r frontend/* site/frontend/
           touch site/.nojekyll
@@ -43,28 +45,41 @@ jobs:
           VER="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::8}"
           echo "Using version: $VER"
 
-          # minify css/js
+          # minify assets
           npx --yes clean-css-cli -o site/frontend/styles.min.css frontend/styles.css
           npx --yes esbuild frontend/app.js --minify --outfile=site/frontend/app.min.js
 
-          # rewrite links in HTML -> *.min + ?v=<VER>
-          HTML="site/frontend/revenue_dashboard.html"
-          perl -0777 -pe "s/href=(\"|')styles\.css\1/href=\$1styles.min.css?v=${VER}\$1/g" -i "$HTML"
-          perl -0777 -pe "s/src=(\"|')app\.js\1/src=\$1app.min.js?v=${VER}\$1/g" -i "$HTML"
-
-          # version.json for loader.html
-          printf '{"version":"%s"}\n' "$VER" > site/frontend/version.json
+          # rewrite links in HTML via Python (avoids YAML escaping problems)
+          export HTML="site/frontend/revenue_dashboard.html"
+          export VER="$VER"
+          python3 - <<'PY'
+          import os, re, json, io
+          html_path = os.environ["HTML"]
+          ver = os.environ["VER"]
+          with open(html_path, 'r', encoding='utf-8') as f:
+              s = f.read()
+          s = re.sub(r'href=(["\'])styles\.css\1',
+                     rf'href=\1styles.min.css?v={ver}\1', s)
+          s = re.sub(r'src=(["\'])app\.js\1',
+                     rf'src=\1app.min.js?v={ver}\1', s)
+          with open(html_path, 'w', encoding='utf-8') as f:
+              f.write(s)
+          with open('site/frontend/version.json', 'w', encoding='utf-8') as f:
+              json.dump({"version": ver}, f)
+          print('HTML rewritten, version.json written:', ver)
+          PY
 
           echo "---- first lines of HTML ----"
-          head -n 12 "$HTML" || true
+          head -n 12 site/frontend/revenue_dashboard.html || true
           echo "---- version.json ----"
           cat site/frontend/version.json
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: 'site'
 
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
