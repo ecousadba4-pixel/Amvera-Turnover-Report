@@ -7,8 +7,6 @@ from fastapi import Header, HTTPException, status
 from app.core.security import TokenError, TokenPayload, verify_access_token
 from app.settings import get_settings
 
-settings = get_settings()
-
 AuthHeader = Annotated[Optional[str], Header(alias="Authorization", convert_underscores=False)]
 
 
@@ -19,6 +17,8 @@ def require_admin_auth(authorization: AuthHeader) -> TokenPayload:
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization scheme")
+
+    settings = get_settings()
 
     try:
         return verify_access_token(token=token.strip(), secret=settings.auth_token_secret)

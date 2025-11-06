@@ -28,8 +28,6 @@ from app.schemas.responses import (
 )
 from app.settings import get_settings
 
-settings = get_settings()
-
 
 class InvalidDateRangeError(ValueError):
     """Raised when the requested date range is invalid."""
@@ -43,6 +41,7 @@ async def get_metrics(
 ) -> MetricsResponse:
     _ensure_valid_date_range(date_from, date_to)
 
+    settings = get_settings()
     dsn = settings.database_url
     resolution = resolve_date_field(date_field)
     filters, params = build_filters(resolution, date_from, date_to)
@@ -94,6 +93,7 @@ async def get_services(
 ) -> ServicesResponse:
     _ensure_valid_date_range(date_from, date_to)
 
+    settings = get_settings()
     dsn = settings.database_url
     resolution = CONSUMPTION_DATE_RESOLUTION
     filters, params = build_filters(resolution, date_from, date_to, table_alias="u")
@@ -183,6 +183,7 @@ async def get_monthly_metrics(
         services_filters=services_filters,
     )
 
+    settings = get_settings()
     dsn = settings.database_url
     rows = await fetchall(dsn, query, query_params) or []
 
@@ -319,6 +320,7 @@ async def get_monthly_services(
         service_filter=service_clause,
     )
 
+    settings = get_settings()
     dsn = settings.database_url
     rows = await fetchall(dsn, query, params) or []
 

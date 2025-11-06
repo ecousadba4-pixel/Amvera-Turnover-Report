@@ -9,8 +9,6 @@ from app.api.routes import api_router
 from app.db import close_all_pools
 from app.settings import get_settings
 
-settings = get_settings()
-
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -28,6 +26,7 @@ def create_app() -> FastAPI:
 
 
 def _configure_cors(app: FastAPI) -> None:
+    settings = get_settings()
     origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
 
     allow_all_origins = not origins
