@@ -1,0 +1,49 @@
+name: Deploy repo (keep /frontend path) to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare artifact
+        run: |
+          # Копируем фронтенд в артефакт для Pages
+          mkdir -p site/frontend
+          cp -r frontend/* site/frontend/
+
+          # Отключаем Jekyll
+          touch site/.nojekyll
+
+          # Версия для кэш-бастинга (таймстемп + короткий SHA)
+          VER="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::8}"
+          echo "Using version: $VER"
+
+          # Подставляем ?v=<версия> для CSS/JS в твоём HTML
+          sed -i "s#href=\"styles.css\"#href=\"styles.css?v=${VER}\"#g" site/frontend/revenue_dashboard.html
+          sed -i "s#src=\"app.js\"#src=\"app.js?v=${VER}\"#g"         site/frontend/revenue_dashboard.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'site'
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
