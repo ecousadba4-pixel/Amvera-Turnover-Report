@@ -4,6 +4,7 @@ import { fmtNumber, fmtPct, fmtRub, toNumber } from "./formatters.js";
 import { loadMetrics } from "./loaders.js";
 import { scheduleHeightUpdate } from "./resizer.js";
 import { getCurrentRangeValues, validateDateRange } from "./filters.js";
+import { formatApiErrorMessage, logApiError } from "./utils/apiError.js";
 
 export function applyRevenueMetrics(data) {
   if (!data) {
@@ -36,9 +37,9 @@ export function fetchRevenueMetrics() {
     validateRange: validateDateRange,
     onApply: applyRevenueMetrics,
     onError: (error) => {
-      console.error("Ошибка загрузки метрик", error);
+      logApiError("Ошибка загрузки метрик", error);
       if (elements.gate && elements.gate.style.display !== "none") {
-        elements.errBox.textContent = `Ошибка загрузки: ${error.message}`;
+        elements.errBox.textContent = formatApiErrorMessage(error, "Ошибка загрузки");
       }
     },
   });

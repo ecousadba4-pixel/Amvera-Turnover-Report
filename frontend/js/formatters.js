@@ -8,6 +8,7 @@ const RUB_FORMATTER = new Intl.NumberFormat("ru-RU", {
 
 const percentFormatters = new Map();
 const numberFormatters = new Map();
+const NBSP_RE = /\u00A0/g;
 
 const monthFormatter = new Intl.DateTimeFormat("ru-RU", {
   month: "long",
@@ -32,6 +33,9 @@ export const fmtPct = (value, fractionDigits = 1) =>
 
 export const fmtNumber = (value, fractionDigits = 0) =>
   getNumberFormatter(fractionDigits).format(value);
+
+export const fmtPctCompact = (value, fractionDigits = 0) =>
+  fmtPct(value, fractionDigits).replace(NBSP_RE, "");
 
 export const formatMonthLabel = (isoDate) => {
   if (!isoDate) {

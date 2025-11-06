@@ -1,6 +1,6 @@
 import { MONTHLY_CONTEXT_SERVICE, SECTION_SERVICES } from "./config.js";
 import { elements } from "./dom.js";
-import { fmtRub, toNumber } from "./formatters.js";
+import { fmtPctCompact, fmtRub, toNumber } from "./formatters.js";
 import { loadMetrics } from "./loaders.js";
 import { scheduleHeightUpdate } from "./resizer.js";
 import { getCurrentRangeValues, validateDateRange } from "./filters.js";
@@ -15,6 +15,7 @@ import {
   clearActiveServiceRow,
   setActiveServiceRowElement,
 } from "./ui/serviceHighlight.js";
+import { formatApiErrorMessage, logApiError } from "./utils/apiError.js";
 
 export function applyServicesMetrics(data) {
   const total = toNumber(data && data.total_amount);
@@ -67,8 +68,7 @@ export function applyServicesMetrics(data) {
 
     const shareEl = document.createElement("div");
     shareEl.className = "services-share";
-    const shareValue = Math.round(toNumber(item.share) * 100);
-    shareEl.textContent = `${shareValue}%`;
+    shareEl.textContent = fmtPctCompact(toNumber(item.share), 0);
 
     row.append(name, amount, shareEl);
     fragment.append(row);
@@ -108,16 +108,16 @@ export function fetchServicesMetrics() {
       state.servicesDirty = true;
     },
     onError: (error) => {
-      console.error("Ошибка загрузки услуг", error);
+      logApiError("Ошибка загрузки услуг", error);
       elements.servicesList.innerHTML = "";
       const errorRow = document.createElement("div");
       errorRow.className = "services-empty services-empty--error";
-      errorRow.textContent = `Ошибка загрузки данных: ${error.message}`;
+      errorRow.textContent = formatApiErrorMessage(error);
       elements.servicesList.append(errorRow);
       clearActiveServiceRow();
       notifyServicesCleared();
       if (elements.gate && elements.gate.style.display !== "none") {
-        elements.errBox.textContent = `Ошибка загрузки: ${error.message}`;
+        elements.errBox.textContent = formatApiErrorMessage(error, "Ошибка загрузки");
       }
       state.servicesDirty = true;
     },

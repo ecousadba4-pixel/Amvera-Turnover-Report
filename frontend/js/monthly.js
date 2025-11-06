@@ -8,18 +8,15 @@ import {
   SECTION_MONTHLY,
 } from "./config.js";
 import { elements, monthlyRangeButtons, summaryCards } from "./dom.js";
-import {
-  abortSectionController,
-  resetMonthlyState,
-  setSectionController,
-  state,
-} from "./state.js";
+import { abortSectionController, resetMonthlyState, state } from "./state.js";
 import { formatMonthLabel, formatMonthlyValue, fmtRub, toNumber } from "./formatters.js";
-import { getMonthlyCacheKey, getMonthlyServiceCacheKey, getCachedResponse, setCachedResponse } from "./cache.js";
-import { ensureAuthSession, getAuthorizationHeader, hasValidAuthSession } from "./auth/index.js";
+import { getMonthlyCacheKey, getMonthlyServiceCacheKey } from "./cache.js";
+import { getAuthorizationHeader, hasValidAuthSession } from "./auth/index.js";
 import { requestWithDateFieldFallback } from "./api/dateField.js";
 import { ensureApiBase } from "./api/base.js";
-import { buildHttpError, isAuthError, isAbortError } from "./api/errors.js";
+import { buildHttpError } from "./api/errors.js";
+import { runCachedRequest } from "./utils/cachedRequest.js";
+import { formatApiErrorMessage, logApiError } from "./utils/apiError.js";
 import { scheduleHeightUpdate } from "./resizer.js";
 import {
   clearActiveServiceRow,
@@ -314,48 +311,6 @@ function renderMonthlyService(serviceType, payload) {
   renderMonthlySeries(points, aggregateValue, (value) => fmtRub(value));
 }
 
-async function executeMonthlyRequest({ cacheKey, fetchData, onSuccess, onAuthError, onError }) {
-  if (!ensureAuthSession()) {
-    return false;
-  }
-
-  const cached = getCachedResponse(cacheKey);
-  if (cached) {
-    onSuccess(cached);
-    return true;
-  }
-
-  abortSectionController(SECTION_MONTHLY);
-
-  const controller = new AbortController();
-  setSectionController(SECTION_MONTHLY, controller);
-
-  try {
-    const data = await fetchData({ signal: controller.signal });
-    setCachedResponse(cacheKey, data);
-    onSuccess(data);
-    return true;
-  } catch (error) {
-    if (isAbortError(error)) {
-      return false;
-    }
-    if (isAuthError(error)) {
-      if (typeof onAuthError === "function") {
-        onAuthError(error);
-      }
-      return false;
-    }
-    if (typeof onError === "function") {
-      onError(error);
-    }
-    return false;
-  } finally {
-    if (state.controllers[SECTION_MONTHLY] === controller) {
-      setSectionController(SECTION_MONTHLY, null);
-    }
-  }
-}
-
 async function fetchMonthlyServiceData({ baseUrl, serviceType, range, signal }) {
   const params = new URLSearchParams({
     service_type: serviceType,
@@ -383,9 +338,10 @@ function handleMonthlyAuthError(error) {
 
 async function loadMonthlyMetric(metric, range) {
   const cacheKey = getMonthlyCacheKey(metric, range);
-  return executeMonthlyRequest({
+  return runCachedRequest({
+    section: SECTION_MONTHLY,
     cacheKey,
-    fetchData: ({ signal }) =>
+    fetcher: ({ signal }) =>
       requestWithDateFieldFallback({
         path: "/api/metrics/monthly",
         baseParams: { metric, range },
@@ -393,12 +349,13 @@ async function loadMonthlyMetric(metric, range) {
         signal,
         headers: getAuthorizationHeader(),
       }),
-    onSuccess: (data) => renderMonthlyMetrics(metric, data),
+    onData: (data) => renderMonthlyMetrics(metric, data),
     onAuthError: handleMonthlyAuthError,
     onError: (error) => {
-      console.error("Ошибка загрузки помесячных данных", error);
-      showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+      logApiError("Ошибка загрузки помесячных данных", error);
+      showMonthlyMessage(formatApiErrorMessage(error));
     },
+    errorLabel: "Ошибка загрузки помесячных данных",
   });
 }
 
@@ -414,20 +371,22 @@ async function loadMonthlyService(serviceType, range) {
   }
 
   const cacheKey = getMonthlyServiceCacheKey(normalizedService, range);
-  return executeMonthlyRequest({
+  return runCachedRequest({
+    section: SECTION_MONTHLY,
     cacheKey,
-    fetchData: ({ signal }) =>
+    fetcher: ({ signal }) =>
       fetchMonthlyServiceData({
         baseUrl,
         serviceType: normalizedService,
         range,
         signal,
       }),
-    onSuccess: (data) => renderMonthlyService(normalizedService, data),
+    onData: (data) => renderMonthlyService(normalizedService, data),
     onAuthError: handleMonthlyAuthError,
     onError: (error) => {
-      console.error("Ошибка загрузки помесячных данных по услугам", error);
-      showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+      logApiError("Ошибка загрузки помесячных данных по услугам", error);
+      showMonthlyMessage(formatApiErrorMessage(error));
     },
+    errorLabel: "Ошибка загрузки помесячных данных по услугам",
   });
 }
