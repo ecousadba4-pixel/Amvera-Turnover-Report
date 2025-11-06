@@ -26,6 +26,7 @@ import {
   getActiveServiceRow,
   setActiveServiceRowElement,
 } from "./ui/serviceHighlight.js";
+import { formatLoadErrorMessage } from "./ui/errors.js";
 
 export function initializeMonthly() {
   bindSummaryCards();
@@ -388,7 +389,7 @@ async function loadMonthlyMetric(metric, range) {
     onAuthError: handleMonthlyAuthError,
     onError: (error) => {
       console.error("Ошибка загрузки помесячных данных", error);
-      showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+      showMonthlyMessage(formatLoadErrorMessage(error));
     },
   });
 }
@@ -418,7 +419,7 @@ async function loadMonthlyService(serviceType, range) {
     onAuthError: handleMonthlyAuthError,
     onError: (error) => {
       console.error("Ошибка загрузки помесячных данных по услугам", error);
-      showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+      showMonthlyMessage(formatLoadErrorMessage(error));
     },
   });
 }

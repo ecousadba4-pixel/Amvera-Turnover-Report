@@ -5,6 +5,8 @@ import { loadMetrics } from "./loaders.js";
 import { scheduleHeightUpdate } from "./resizer.js";
 import { getCurrentRangeValues, validateDateRange } from "./filters.js";
 import { state } from "./state.js";
+import { formatLoadErrorMessage } from "./ui/errors.js";
+import { updateGateError } from "./ui/gate.js";
 import {
   getActiveServiceType,
   handleServiceNameClick,
@@ -112,13 +114,11 @@ export function fetchServicesMetrics() {
       elements.servicesList.innerHTML = "";
       const errorRow = document.createElement("div");
       errorRow.className = "services-empty services-empty--error";
-      errorRow.textContent = `Ошибка загрузки данных: ${error.message}`;
+      errorRow.textContent = formatLoadErrorMessage(error);
       elements.servicesList.append(errorRow);
       clearActiveServiceRow();
       notifyServicesCleared();
-      if (elements.gate?.style.display !== "none") {
-        elements.errBox.textContent = `Ошибка загрузки: ${error.message}`;
-      }
+      updateGateError(formatLoadErrorMessage(error, "Ошибка загрузки"));
       state.servicesDirty = true;
     },
   });
