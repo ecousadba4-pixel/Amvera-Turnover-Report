@@ -55,6 +55,20 @@ body {
   gap: 24px;
 }
 
+.analytics-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.analytics-card .section-switch {
+  width: 100%;
+}
+
+.analytics-card .info-summary {
+  flex: 1 1 auto;
+}
+
 /* === КАРТОЧКИ === */
 .card,
 .form-container {
@@ -238,10 +252,12 @@ h2 {
 }
 
 .section-switch {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .section-switch__btn {
@@ -348,9 +364,11 @@ h2 {
   background: rgba(138, 157, 76, 0.08);
   border-radius: 16px;
   padding: 1rem 1.1rem;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 100%;
+  justify-content: space-between;
 }
 
 .summary-card--revenue {
@@ -394,15 +412,16 @@ h2 {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  min-height: 2.2rem;
+  min-height: 2.6rem;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .summary-value {
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-primary);
+  margin-top: auto;
 }
 
 .services-card {
@@ -577,6 +596,10 @@ body.is-loading .summary-value::after {
     box-shadow: 0 12px 26px rgba(66, 79, 31, 0.14);
   }
 
+  .analytics-card {
+    gap: 1.1rem;
+  }
+
   .centered {
     align-items: flex-start;
     padding: 16px 16px 28px;
@@ -683,6 +706,7 @@ body.is-loading .summary-value::after {
 
   .summary-label {
     font-size: 0.78rem;
+    min-height: 2.2rem;
   }
 
   .services-row {
@@ -714,44 +738,33 @@ body.is-loading .summary-value::after {
   .dashboard {
     display: grid;
     grid-template-columns: minmax(320px, 360px) 1fr;
-    grid-template-areas:
-      'filter switch'
-      'filter summary'
-      'filter services';
-    gap: 24px 32px;
+    grid-auto-rows: minmax(0, auto);
+    column-gap: 32px;
+    row-gap: 24px;
     align-items: stretch;
   }
 
   .filter-card {
-    grid-area: filter;
+    grid-column: 1;
+    grid-row: 1 / span 2;
     height: 100%;
     display: flex;
     flex-direction: column;
   }
 
-  .section-switch {
-    grid-area: switch;
-    display: flex;
-    width: 100%;
-    justify-content: flex-start;
-    padding: 1.2rem 1.6rem;
-    background: var(--surface-card);
-    border-radius: 20px;
-    box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
-  }
-
-  .info-summary {
-    grid-area: summary;
-    background: var(--surface-card);
-    border-radius: 20px;
-    padding: 1.5rem;
-    box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
+  .analytics-card {
+    grid-column: 2;
+    grid-row: 1;
     height: 100%;
-    align-self: stretch;
   }
 
   .services-card {
-    grid-area: services;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .analytics-card .section-switch {
+    justify-content: flex-start;
   }
 }
 
