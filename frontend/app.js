@@ -567,7 +567,6 @@ async function loadMonthlyMetric(metric, range) {
 
   const controller = new AbortController();
   setSectionController(SECTION_MONTHLY, controller);
-  setLoadingState(true);
 
   const params = new URLSearchParams({
     metric,
@@ -607,7 +606,6 @@ async function loadMonthlyMetric(metric, range) {
   } finally {
     if (getSectionController(SECTION_MONTHLY) === controller) {
       setSectionController(SECTION_MONTHLY, null);
-      setLoadingState(false);
     }
   }
 }
@@ -637,7 +635,6 @@ async function loadMonthlyService(serviceType, range) {
 
   const controller = new AbortController();
   setSectionController(SECTION_MONTHLY, controller);
-  setLoadingState(true);
 
   const params = new URLSearchParams({
     service_type: normalizedService,
@@ -676,7 +673,6 @@ async function loadMonthlyService(serviceType, range) {
   } finally {
     if (getSectionController(SECTION_MONTHLY) === controller) {
       setSectionController(SECTION_MONTHLY, null);
-      setLoadingState(false);
     }
   }
 }
