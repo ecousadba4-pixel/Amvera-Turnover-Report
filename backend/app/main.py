@@ -28,32 +28,30 @@ def create_app() -> FastAPI:
 
 def _configure_cors(app: FastAPI) -> None:
     settings = get_settings()
-
-    raw_origins = [
-        origin.strip().rstrip("/")
-        for origin in settings.cors_allow_origins.split(",")
-        if origin.strip()
-    ]
-
-    allow_all_origins = "*" in raw_origins or not raw_origins
-    explicit_origins: list[str] = []
-    wildcard_patterns: list[str] = []
-
-    if not allow_all_origins:
-        for origin in raw_origins:
-            if "*" in origin:
-                wildcard_patterns.append(_cors_pattern_to_regex(origin))
-            else:
-                explicit_origins.append(origin)
+    allow_origins, allow_origin_regex = _parse_cors_origins(settings.cors_allow_origins)
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if allow_all_origins else explicit_origins,
-        allow_origin_regex="|".join(wildcard_patterns) if wildcard_patterns else None,
+        allow_origins=allow_origins,
+        allow_origin_regex=allow_origin_regex,
         allow_methods=["*"],
         allow_headers=["*"],
         allow_credentials=False,
     )
+
+
+def _parse_cors_origins(raw_origins: str) -> tuple[list[str], str | None]:
+    """Парсит строку origins и возвращает список явных origins и regex."""
+
+    origins = [origin.strip().rstrip("/") for origin in raw_origins.split(",") if origin.strip()]
+
+    if "*" in origins or not origins:
+        return ["*"], None
+
+    explicit = [origin for origin in origins if "*" not in origin]
+    wildcards = [_cors_pattern_to_regex(origin) for origin in origins if "*" in origin]
+
+    return explicit, "|".join(wildcards) if wildcards else None
 
 
 def _cors_pattern_to_regex(pattern: str) -> str:
