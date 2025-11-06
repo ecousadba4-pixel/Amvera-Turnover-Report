@@ -72,6 +72,11 @@ body {
   box-shadow: 0 16px 40px rgba(138, 157, 76, 0.22);
 }
 
+.filter-card:hover {
+  transform: none;
+  box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
+}
+
 /* === ЗАГОЛОВКИ === */
 h1,
 h2 {
@@ -699,6 +704,46 @@ body.is-loading .summary-value::after {
       'revenue count repeat'
       'avg min max'
       'stay bonus services';
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard {
+    display: grid;
+    grid-template-columns: minmax(320px, 360px) 1fr;
+    grid-template-areas:
+      'filter switch'
+      'filter summary'
+      'filter services';
+    gap: 24px 32px;
+    align-items: start;
+  }
+
+  .filter-card {
+    grid-area: filter;
+  }
+
+  .section-switch {
+    grid-area: switch;
+    display: flex;
+    width: 100%;
+    justify-content: flex-start;
+    padding: 1.2rem 1.6rem;
+    background: var(--surface-card);
+    border-radius: 20px;
+    box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
+  }
+
+  .info-summary {
+    grid-area: summary;
+    background: var(--surface-card);
+    border-radius: 20px;
+    padding: 1.5rem;
+    box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
+  }
+
+  .services-card {
+    grid-area: services;
   }
 }
 
