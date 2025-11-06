@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Tuple, TypeVar
@@ -6,6 +7,13 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Tupl
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+
+__all__ = [
+    "fetchone",
+    "fetchall",
+    "get_conn",
+    "close_all_pools",
+]
 
 _pool_lock = asyncio.Lock()
 _pools: Dict[str, AsyncConnectionPool] = {}
