@@ -1,7 +1,6 @@
 import {
   STORAGE_KEY,
   TOKEN_STORAGE_VERSION,
-  TOKEN_TYPE_HASH,
   TOKEN_TYPE_TOKEN,
 } from "../config.js";
 
@@ -51,15 +50,6 @@ export function readStoredSession() {
     }
 
     if (version === TOKEN_STORAGE_VERSION) {
-      const type = parsed.type === TOKEN_TYPE_HASH ? TOKEN_TYPE_HASH : TOKEN_TYPE_TOKEN;
-      if (type === TOKEN_TYPE_HASH) {
-        const hash = typeof parsed.hash === "string" ? parsed.hash.trim().toLowerCase() : "";
-        if (!hash) {
-          window.sessionStorage.removeItem(STORAGE_KEY);
-          return null;
-        }
-        return { type: TOKEN_TYPE_HASH, hash };
-      }
       return normalizeTokenSession(parsed.token, parsed.expiresAt);
     }
 
@@ -83,21 +73,6 @@ export function persistSession(session) {
   try {
     if (!session) {
       window.sessionStorage.removeItem(STORAGE_KEY);
-      return;
-    }
-
-    if (session.type === TOKEN_TYPE_HASH) {
-      const hash = typeof session.hash === "string" ? session.hash.trim().toLowerCase() : "";
-      if (!hash) {
-        window.sessionStorage.removeItem(STORAGE_KEY);
-        return;
-      }
-      const payload = {
-        version: TOKEN_STORAGE_VERSION,
-        type: TOKEN_TYPE_HASH,
-        hash,
-      };
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
       return;
     }
 

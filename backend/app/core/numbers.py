@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
 
-
-def as_float(value: Any) -> float:
+def as_float(value: object) -> float:
+    """Convert value to float, defaulting to 0.0 if None."""
     return float(value if value is not None else 0)
 
 

@@ -75,11 +75,11 @@ def _as_optional_float(value: object) -> Optional[float]:
 
 
 def _coerce_date(value: object) -> Optional[date]:
+    """Convert value to date, handling datetime objects."""
     if isinstance(value, date):
         return value
-    date_method = getattr(value, "date", None)
-    if callable(date_method):
-        result = date_method()  # type: ignore[misc]
+    if hasattr(value, "date") and callable(value.date):
+        result = value.date()  # type: ignore[misc]
         return result if isinstance(result, date) else None
     return None
 
@@ -134,20 +134,20 @@ async def fetch_services_listing(
     offset = (page - 1) * page_size
     query = load_query("services_listing.sql").format(filters=filters)
     query_params = {**params, "limit": page_size, "offset": offset}
-    rows = await fetchall(query, query_params) or []
+    rows = await fetchall(query, query_params)
 
     summary_row: Mapping[str, object] = {}
     items: list[ServiceUsageRecord] = []
     for row in rows:
         if row.get("is_summary"):
             summary_row = row
-            continue
-        items.append(
-            ServiceUsageRecord(
-                service_type=_normalize_service_type(row.get("service_type")),
-                total_amount=as_float(row.get("total_amount")),
+        else:
+            items.append(
+                ServiceUsageRecord(
+                    service_type=_normalize_service_type(row.get("service_type")),
+                    total_amount=as_float(row.get("total_amount")),
+                )
             )
-        )
 
     total_items = _as_int(summary_row.get("total_items")) if summary_row else 0
     total_amount = as_float(summary_row.get("overall_amount")) if summary_row else 0.0
@@ -190,26 +190,25 @@ async def fetch_monthly_metric_rows(
         services_filters=services_filters,
     )
 
-    rows = await fetchall(query, query_params) or []
+    rows = await fetchall(query, query_params)
     result: list[MonthlyMetricRecord] = []
     for row in rows:
         month_start = _coerce_date(row.get("month_start"))
-        if not month_start:
-            continue
-        result.append(
-            MonthlyMetricRecord(
-                month=month_start,
-                revenue=as_float(row.get("revenue")),
-                bookings_count=_as_int(row.get("bookings_count")),
-                lvl2p=_as_int(row.get("lvl2p")),
-                min_booking=_as_optional_float(row.get("min_booking")),
-                max_booking=_as_optional_float(row.get("max_booking")),
-                avg_check=as_float(row.get("avg_check")),
-                avg_stay_days=as_float(row.get("avg_stay_days")),
-                bonus_spent_sum=as_float(row.get("bonus_spent_sum")),
-                services_amount=as_float(row.get("services_amount")),
+        if month_start:
+            result.append(
+                MonthlyMetricRecord(
+                    month=month_start,
+                    revenue=as_float(row.get("revenue")),
+                    bookings_count=_as_int(row.get("bookings_count")),
+                    lvl2p=_as_int(row.get("lvl2p")),
+                    min_booking=_as_optional_float(row.get("min_booking")),
+                    max_booking=_as_optional_float(row.get("max_booking")),
+                    avg_check=as_float(row.get("avg_check")),
+                    avg_stay_days=as_float(row.get("avg_stay_days")),
+                    bonus_spent_sum=as_float(row.get("bonus_spent_sum")),
+                    services_amount=as_float(row.get("services_amount")),
+                )
             )
-        )
 
     return result
 
@@ -246,18 +245,17 @@ async def fetch_monthly_service_rows(
         service_filter=service_clause,
     )
 
-    rows = await fetchall(query, params) or []
+    rows = await fetchall(query, params)
     result: list[MonthlyServiceRecord] = []
     for row in rows:
         month_start = _coerce_date(row.get("month_start"))
-        if not month_start:
-            continue
-        result.append(
-            MonthlyServiceRecord(
-                month=month_start,
-                total_amount=as_float(row.get("total_amount")),
+        if month_start:
+            result.append(
+                MonthlyServiceRecord(
+                    month=month_start,
+                    total_amount=as_float(row.get("total_amount")),
+                )
             )
-        )
 
     return result
 

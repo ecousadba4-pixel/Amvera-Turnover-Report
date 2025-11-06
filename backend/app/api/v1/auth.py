@@ -25,14 +25,17 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, settings: SettingsDep) -> LoginResponse:
-
     password = (payload.password or "").strip()
     if not password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required"
+        )
 
     candidate_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
     if not hmac.compare_digest(candidate_hash, settings.admin_password_sha256):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
 
     token, token_payload = create_access_token(
         secret=settings.auth_token_secret,
