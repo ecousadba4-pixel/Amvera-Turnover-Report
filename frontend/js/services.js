@@ -4,13 +4,17 @@ import { fmtRub, toNumber } from "./formatters.js";
 import { loadMetrics } from "./loaders.js";
 import { scheduleHeightUpdate } from "./resizer.js";
 import { getCurrentRangeValues, validateDateRange } from "./filters.js";
-import { state, setActiveServiceRow } from "./state.js";
+import { state } from "./state.js";
 import {
   getActiveServiceType,
   handleServiceNameClick,
   notifyServicesCleared,
   resetMonthlyDetails,
 } from "./monthly.js";
+import {
+  clearActiveServiceRow,
+  setActiveServiceRowElement,
+} from "./ui/serviceHighlight.js";
 
 export function applyServicesMetrics(data) {
   const total = toNumber(data && data.total_amount);
@@ -24,7 +28,7 @@ export function applyServicesMetrics(data) {
     empty.textContent = "Данных за выбранный период нет";
     elements.servicesList.append(empty);
     scheduleHeightUpdate();
-    setActiveServiceRow(null);
+    clearActiveServiceRow();
     notifyServicesCleared();
     return;
   }
@@ -79,7 +83,7 @@ export function applyServicesMetrics(data) {
 
   if (activeServiceType) {
     if (nextActiveRow) {
-      setActiveServiceRow(nextActiveRow);
+      setActiveServiceRowElement(nextActiveRow);
     } else if (state.activeMonthlyContext === MONTHLY_CONTEXT_SERVICE) {
       resetMonthlyDetails();
     }
@@ -110,7 +114,7 @@ export function fetchServicesMetrics() {
       errorRow.className = "services-empty services-empty--error";
       errorRow.textContent = `Ошибка загрузки данных: ${error.message}`;
       elements.servicesList.append(errorRow);
-      setActiveServiceRow(null);
+      clearActiveServiceRow();
       notifyServicesCleared();
       if (elements.gate && elements.gate.style.display !== "none") {
         elements.errBox.textContent = `Ошибка загрузки: ${error.message}`;
