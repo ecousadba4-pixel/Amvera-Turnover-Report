@@ -341,6 +341,34 @@ function formatMonthlyValue(metric, value) {
   return suffix ? `${formatted}${suffix}` : formatted;
 }
 
+function calculateMonthlyAggregate(metric, points) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return null;
+  }
+
+  const cfg = MONTHLY_METRIC_CONFIG[metric];
+  if (!cfg) {
+    return null;
+  }
+
+  const values = points
+    .map((point) => (point ? point.value : null))
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => toNumber(value));
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  const type = cfg.format && cfg.format.type;
+  if (type === "percent") {
+    const sum = values.reduce((acc, value) => acc + value, 0);
+    return sum / values.length;
+  }
+
+  return values.reduce((acc, value) => acc + value, 0);
+}
+
 function showMonthlyMessage(message) {
   if (monthlyEmpty) {
     monthlyEmpty.textContent = message;
@@ -380,24 +408,42 @@ function renderMonthlyMetrics(metric, payload) {
 
   const fragment = document.createDocumentFragment();
 
-  points
+  const sortedPoints = points
     .slice()
-    .sort((a, b) => new Date(b.month) - new Date(a.month))
-    .forEach((point) => {
-      const row = document.createElement("div");
-      row.className = "monthly-row";
+    .sort((a, b) => new Date(b.month) - new Date(a.month));
 
-      const monthEl = document.createElement("div");
-      monthEl.className = "monthly-row__month";
-      monthEl.textContent = formatMonthLabel(point.month);
+  sortedPoints.forEach((point) => {
+    const row = document.createElement("div");
+    row.className = "monthly-row";
 
-      const valueEl = document.createElement("div");
-      valueEl.className = "monthly-row__value";
-      valueEl.textContent = formatMonthlyValue(metric, point.value);
+    const monthEl = document.createElement("div");
+    monthEl.className = "monthly-row__month";
+    monthEl.textContent = formatMonthLabel(point.month);
 
-      row.append(monthEl, valueEl);
-      fragment.append(row);
-    });
+    const valueEl = document.createElement("div");
+    valueEl.className = "monthly-row__value";
+    valueEl.textContent = formatMonthlyValue(metric, point.value);
+
+    row.append(monthEl, valueEl);
+    fragment.append(row);
+  });
+
+  const aggregateValue = calculateMonthlyAggregate(metric, sortedPoints);
+  if (aggregateValue !== null) {
+    const totalRow = document.createElement("div");
+    totalRow.className = "monthly-row monthly-row--total";
+
+    const totalLabel = document.createElement("div");
+    totalLabel.className = "monthly-row__month monthly-row__month--total";
+    totalLabel.textContent = "Итого";
+
+    const totalValue = document.createElement("div");
+    totalValue.className = "monthly-row__value monthly-row__value--total";
+    totalValue.textContent = formatMonthlyValue(metric, aggregateValue);
+
+    totalRow.append(totalLabel, totalValue);
+    fragment.append(totalRow);
+  }
 
   monthlyRows.append(fragment);
 }
