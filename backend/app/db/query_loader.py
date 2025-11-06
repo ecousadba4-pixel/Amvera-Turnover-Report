@@ -33,5 +33,5 @@ def load_query(name: str) -> sql.SQL:
     return sql.SQL(text)
 
 
-__all__ = ["QueryNotFoundError", "load_query"]
+__all__ = ["load_query"]
 
