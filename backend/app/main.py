@@ -174,6 +174,10 @@ async def metrics(
     dsn = settings.database_url
     resolution = _resolve_date_field(date_field)
     filters, params = _build_filters(resolution, date_from, date_to)
+    services_filters, services_params = _build_filters(
+        resolution, date_from, date_to, table_alias="g_u"
+    )
+    params.update(services_params)
 
     query = sql.SQL(
         """
@@ -187,9 +191,14 @@ async def metrics(
           COALESCE(u.services_total, 0)::numeric AS services_total
         FROM guests AS g
         LEFT JOIN (
-          SELECT shelter_booking_id, COALESCE(SUM(uslugi_amount), 0)::numeric AS services_total
-          FROM uslugi
-          GROUP BY shelter_booking_id
+          SELECT
+            u.shelter_booking_id,
+            COALESCE(SUM(u.uslugi_amount), 0)::numeric AS services_total
+          FROM uslugi AS u
+          JOIN guests AS g_u ON g_u.shelter_booking_id = u.shelter_booking_id
+          WHERE 1=1
+            {services_filters}
+          GROUP BY u.shelter_booking_id
         ) AS u ON u.shelter_booking_id = g.shelter_booking_id
         WHERE 1=1
           {filters}
@@ -206,7 +215,7 @@ async def metrics(
         COALESCE(SUM(services_total), 0)::numeric AS services_amount
       FROM base
     """
-    ).format(filters=filters)
+    ).format(filters=filters, services_filters=services_filters)
 
     async with get_conn(dsn) as conn:
         async with conn.cursor() as cur:
@@ -269,32 +278,51 @@ async def services(
         WHERE 1=1
           {filters}
         GROUP BY COALESCE(u.uslugi_type, 'Без категории')
+      ),
+      ranked AS (
+        SELECT
+          service_type,
+          total_amount,
+          ROW_NUMBER() OVER (ORDER BY total_amount DESC, service_type) AS row_number,
+          COUNT(*) OVER () AS total_items,
+          COALESCE(SUM(total_amount) OVER (), 0)::numeric AS overall_amount
+        FROM aggregated
+      ),
+      limited AS (
+        SELECT
+          service_type,
+          total_amount,
+          total_items,
+          overall_amount,
+          FALSE AS is_summary,
+          row_number AS sort_order
+        FROM ranked
+        WHERE row_number > %(offset)s
+          AND row_number <= %(offset)s + %(limit)s
+      ),
+      summary AS (
+        SELECT
+          NULL::text AS service_type,
+          NULL::numeric AS total_amount,
+          COALESCE(MAX(total_items), 0)::int AS total_items,
+          COALESCE(MAX(overall_amount), 0)::numeric AS overall_amount,
+          TRUE AS is_summary,
+          (%(offset)s + %(limit)s + 1) AS sort_order
+        FROM ranked
+      ),
+      combined AS (
+        SELECT * FROM limited
+        UNION ALL
+        SELECT * FROM summary
       )
       SELECT
         service_type,
-        total_amount
-      FROM aggregated
-      ORDER BY total_amount DESC, service_type
-      LIMIT %(limit)s OFFSET %(offset)s
-    """
-    ).format(filters=filters)
-
-    totals_query = sql.SQL(
-        """
-      WITH aggregated AS (
-        SELECT
-          COALESCE(u.uslugi_type, 'Без категории') AS service_type,
-          COALESCE(SUM(u.uslugi_amount), 0)::numeric AS total_amount
-        FROM uslugi AS u
-        JOIN guests AS g ON g.shelter_booking_id = u.shelter_booking_id
-        WHERE 1=1
-          {filters}
-        GROUP BY COALESCE(u.uslugi_type, 'Без категории')
-      )
-      SELECT
-        COUNT(*)::int AS total_items,
-        COALESCE(SUM(total_amount), 0)::numeric AS overall_amount
-      FROM aggregated
+        total_amount,
+        total_items,
+        overall_amount,
+        is_summary
+      FROM combined
+      ORDER BY sort_order
     """
     ).format(filters=filters)
 
@@ -305,19 +333,22 @@ async def services(
             await cur.execute(query, query_params)
             rows = await cur.fetchall() or []
 
-            await cur.execute(totals_query, params)
-            totals_row = await cur.fetchone() or {}
+    summary_row: dict[str, object] = {}
+    raw_items: list[dict[str, object]] = []
 
-    raw_items = [
-        {
-            "service_type": str(row.get("service_type") or "Без категории"),
-            "total_amount": _as_float(row.get("total_amount")),
-        }
-        for row in rows
-    ]
+    for row in rows:
+        if row.get("is_summary"):
+            summary_row = row
+            continue
+        raw_items.append(
+            {
+                "service_type": str(row.get("service_type") or "Без категории"),
+                "total_amount": _as_float(row.get("total_amount")),
+            }
+        )
 
-    total_items = int(totals_row.get("total_items", 0))
-    total_amount = _as_float(totals_row.get("overall_amount"))
+    total_items = int(summary_row.get("total_items", 0)) if summary_row else 0
+    total_amount = _as_float(summary_row.get("overall_amount")) if summary_row else 0.0
 
     items = [
         ServiceItem(
