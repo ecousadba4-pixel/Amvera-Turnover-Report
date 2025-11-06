@@ -20,6 +20,9 @@ async def metrics(
     date_to: Optional[date] = Query(default=None),
     date_field: DateField = Query(default=DateField.created),
 ) -> MetricsResponse:
+    if date_from and date_to and date_from > date_to:
+        date_from, date_to = date_to, date_from
+
     try:
         return await get_metrics(date_from=date_from, date_to=date_to, date_field=date_field)
     except InvalidDateRangeError as exc:

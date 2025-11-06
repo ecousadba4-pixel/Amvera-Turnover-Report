@@ -21,6 +21,9 @@ async def services(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=1000),
 ) -> ServicesResponse:
+    if date_from and date_to and date_from > date_to:
+        date_from, date_to = date_to, date_from
+
     try:
         return await get_services(
             date_from=date_from,
