@@ -14,7 +14,7 @@ function resolveApiBase() {
     return normalizeBase(DEFAULT_API_BASE);
   }
 
-  const origin = window.location && window.location.origin;
+  const origin = window.location?.origin;
   if (origin && origin !== "null" && origin !== "file://") {
     return normalizeBase(origin);
   }

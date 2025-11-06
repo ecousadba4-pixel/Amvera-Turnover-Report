@@ -37,7 +37,7 @@ export function fetchRevenueMetrics() {
     onApply: applyRevenueMetrics,
     onError: (error) => {
       console.error("Ошибка загрузки метрик", error);
-      if (elements.gate && elements.gate.style.display !== "none") {
+      if (elements.gate?.style.display !== "none") {
         elements.errBox.textContent = `Ошибка загрузки: ${error.message}`;
       }
     },

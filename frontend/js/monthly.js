@@ -40,9 +40,7 @@ export function resetMonthlyDetails() {
   summaryCards.forEach((card) => card.classList.remove("is-active"));
   clearMonthlyRows();
   showMonthlyMessage(MONTHLY_INITIAL_MESSAGE);
-  if (elements.monthlyCard) {
-    elements.monthlyCard.classList.remove("hidden");
-  }
+  elements.monthlyCard?.classList.remove("hidden");
   if (elements.monthlyTitle) {
     elements.monthlyTitle.textContent = MONTHLY_DEFAULT_TITLE;
   }
@@ -54,16 +52,16 @@ export function getActiveServiceType() {
 }
 
 export function handleServiceNameClick(row, serviceType) {
-  const normalizedService = (serviceType || "").trim();
+  const normalizedService = (serviceType ?? "").trim();
   if (!normalizedService) {
     return;
   }
 
+  const isMonthlyCardVisible = elements.monthlyCard?.classList.contains("hidden") === false;
   if (
     state.activeMonthlyContext === MONTHLY_CONTEXT_SERVICE &&
     getActiveServiceRow() === row &&
-    elements.monthlyCard &&
-    !elements.monthlyCard.classList.contains("hidden")
+    isMonthlyCardVisible
   ) {
     resetMonthlyDetails();
     return;
@@ -88,9 +86,7 @@ export function handleServiceNameClick(row, serviceType) {
   if (elements.monthlyTitle) {
     elements.monthlyTitle.textContent = normalizedService;
   }
-  if (elements.monthlyCard) {
-    elements.monthlyCard.classList.remove("hidden");
-  }
+  elements.monthlyCard?.classList.remove("hidden");
 
   showMonthlyMessage("Загрузка...");
   clearMonthlyRows();
@@ -154,7 +150,8 @@ function handleSummaryCardClick(card, metric) {
     return;
   }
 
-  if (state.activeSummaryCard === card && elements.monthlyCard && !elements.monthlyCard.classList.contains("hidden")) {
+  const isMonthlyCardVisible = elements.monthlyCard?.classList.contains("hidden") === false;
+  if (state.activeSummaryCard === card && isMonthlyCardVisible) {
     resetMonthlyDetails();
     return;
   }
@@ -180,9 +177,7 @@ function handleSummaryCardClick(card, metric) {
   if (elements.monthlyTitle) {
     elements.monthlyTitle.textContent = MONTHLY_METRIC_CONFIG[metric].label;
   }
-  if (elements.monthlyCard) {
-    elements.monthlyCard.classList.remove("hidden");
-  }
+  elements.monthlyCard?.classList.remove("hidden");
 
   showMonthlyMessage("Загрузка...");
   clearMonthlyRows();
@@ -205,9 +200,7 @@ function showMonthlyMessage(message) {
     elements.monthlyEmpty.textContent = message;
     elements.monthlyEmpty.classList.remove("hidden");
   }
-  if (elements.monthlyTable) {
-    elements.monthlyTable.classList.add("hidden");
-  }
+  elements.monthlyTable?.classList.add("hidden");
 }
 
 function clearMonthlyRows() {
@@ -245,7 +238,7 @@ function renderMonthlySeries(points, aggregateValue, formatValue) {
 
     const valueEl = document.createElement("div");
     valueEl.className = "monthly-row__value";
-    const numericValue = toNumber(point && point.value);
+    const numericValue = toNumber(point?.value);
     valueEl.textContent = formatValue(numericValue);
 
     row.append(monthEl, valueEl);
@@ -280,15 +273,14 @@ function renderMonthlyMetrics(metric, payload) {
   ) {
     return;
   }
-  if (payload.range && payload.range !== state.activeMonthlyRange) {
+  if (payload?.range && payload.range !== state.activeMonthlyRange) {
     return;
   }
 
-  const points = Array.isArray(payload.points) ? payload.points : [];
-  const aggregateValue =
-    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate")
-      ? payload.aggregate
-      : null;
+  const points = Array.isArray(payload?.points) ? payload.points : [];
+  const aggregateValue = Object.prototype.hasOwnProperty.call(payload ?? {}, "aggregate")
+    ? payload.aggregate
+    : null;
 
   renderMonthlySeries(points, aggregateValue, (value) => formatMonthlyValue(metric, value));
 }
@@ -301,15 +293,14 @@ function renderMonthlyService(serviceType, payload) {
   ) {
     return;
   }
-  if (payload.range && payload.range !== state.activeMonthlyRange) {
+  if (payload?.range && payload.range !== state.activeMonthlyRange) {
     return;
   }
 
-  const points = Array.isArray(payload.points) ? payload.points : [];
-  const aggregateValue =
-    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate")
-      ? payload.aggregate
-      : null;
+  const points = Array.isArray(payload?.points) ? payload.points : [];
+  const aggregateValue = Object.prototype.hasOwnProperty.call(payload ?? {}, "aggregate")
+    ? payload.aggregate
+    : null;
 
   renderMonthlySeries(points, aggregateValue, (value) => fmtRub(value));
 }
@@ -350,7 +341,7 @@ async function executeMonthlyRequest({ cacheKey, fetchData, onSuccess, onAuthErr
     }
     return false;
   } finally {
-    if (state.controllers[SECTION_MONTHLY] === controller) {
+    if (state.controllers?.[SECTION_MONTHLY] === controller) {
       setSectionController(SECTION_MONTHLY, null);
     }
   }

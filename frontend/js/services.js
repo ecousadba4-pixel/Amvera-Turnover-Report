@@ -17,11 +17,11 @@ import {
 } from "./ui/serviceHighlight.js";
 
 export function applyServicesMetrics(data) {
-  const total = toNumber(data && data.total_amount);
+  const total = toNumber(data?.total_amount);
   elements.servicesTotal.textContent = total > 0 ? `Итого: ${fmtRub(total)}` : "Итого: —";
 
   elements.servicesList.innerHTML = "";
-  const items = Array.isArray(data && data.items) ? data.items : [];
+  const items = Array.isArray(data?.items) ? data.items : [];
   if (items.length === 0) {
     const empty = document.createElement("div");
     empty.className = "services-empty";
@@ -40,7 +40,7 @@ export function applyServicesMetrics(data) {
   items.forEach((item) => {
     const row = document.createElement("div");
     row.className = "services-row";
-    const serviceType = (item.service_type || "Без категории").trim();
+    const serviceType = (item.service_type ?? "Без категории").trim();
     row.dataset.serviceType = serviceType;
 
     const name = document.createElement("div");
@@ -116,7 +116,7 @@ export function fetchServicesMetrics() {
       elements.servicesList.append(errorRow);
       clearActiveServiceRow();
       notifyServicesCleared();
-      if (elements.gate && elements.gate.style.display !== "none") {
+      if (elements.gate?.style.display !== "none") {
         elements.errBox.textContent = `Ошибка загрузки: ${error.message}`;
       }
       state.servicesDirty = true;

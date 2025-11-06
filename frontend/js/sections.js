@@ -27,7 +27,7 @@ export function applySection(section) {
     !isRevenue &&
     hasValidAuthSession() &&
     state.servicesDirty &&
-    !state.controllers[SECTION_SERVICES] &&
+    !state.controllers?.[SECTION_SERVICES] &&
     state.servicesFetchTimer === null
   ) {
     fetchServicesMetrics();
