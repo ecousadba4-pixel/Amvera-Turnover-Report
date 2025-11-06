@@ -189,25 +189,27 @@ def _convert_services(listing: ServicesListingResult) -> Sequence[ServiceItem]:
 
 
 def _resolve_monthly_value(metric: MonthlyMetric, record: MonthlyMetricRecord) -> float:
-    if metric is MonthlyMetric.revenue:
-        return record.revenue
-    if metric is MonthlyMetric.avg_check:
-        return record.avg_check
-    if metric is MonthlyMetric.bookings_count:
-        return float(record.bookings_count)
-    if metric is MonthlyMetric.level2plus_share:
-        return _calculate_share(record.lvl2p, record.bookings_count)
-    if metric is MonthlyMetric.min_booking:
-        return record.min_booking if record.bookings_count else 0.0
-    if metric is MonthlyMetric.max_booking:
-        return record.max_booking if record.bookings_count else 0.0
-    if metric is MonthlyMetric.avg_stay_days:
-        return record.avg_stay_days
-    if metric is MonthlyMetric.bonus_payment_share:
-        return _calculate_share(record.bonus_spent_sum, record.revenue)
-    if metric is MonthlyMetric.services_share:
-        return _calculate_share(record.services_amount, record.revenue)
-    return 0.0
+    match metric:
+        case MonthlyMetric.revenue:
+            return record.revenue
+        case MonthlyMetric.avg_check:
+            return record.avg_check
+        case MonthlyMetric.bookings_count:
+            return float(record.bookings_count)
+        case MonthlyMetric.level2plus_share:
+            return _calculate_share(record.lvl2p, record.bookings_count)
+        case MonthlyMetric.min_booking:
+            return record.min_booking if record.bookings_count else 0.0
+        case MonthlyMetric.max_booking:
+            return record.max_booking if record.bookings_count else 0.0
+        case MonthlyMetric.avg_stay_days:
+            return record.avg_stay_days
+        case MonthlyMetric.bonus_payment_share:
+            return _calculate_share(record.bonus_spent_sum, record.revenue)
+        case MonthlyMetric.services_share:
+            return _calculate_share(record.services_amount, record.revenue)
+        case _:
+            return 0.0
 
 
 @dataclass(slots=True)
