@@ -258,41 +258,48 @@ class MonthlyAggregation:
             self.services_revenue_total += record.revenue
 
     def finalize(self, metric: MonthlyMetric, *, has_points: bool) -> Optional[float]:
-        if metric is MonthlyMetric.revenue:
-            return self.revenue_sum
-        if metric is MonthlyMetric.bookings_count:
-            return float(self.bookings_sum)
-        if metric is MonthlyMetric.avg_check:
-            if self.bookings_with_data > 0:
-                return self.revenue_with_bookings_sum / self.bookings_with_data
-            return 0.0 if has_points else None
-        if metric is MonthlyMetric.level2plus_share:
-            if self.bookings_with_data > 0:
-                return _calculate_share(self.lvl2p_sum, self.bookings_with_data)
-            return 0.0 if has_points else None
-        if metric is MonthlyMetric.min_booking:
-            if self.min_booking_value is not None:
-                return self.min_booking_value
-            return 0.0 if has_points else None
-        if metric is MonthlyMetric.max_booking:
-            if self.max_booking_value is not None:
-                return self.max_booking_value
-            return 0.0 if has_points else None
-        if metric is MonthlyMetric.avg_stay_days:
-            if self.avg_stay_weight > 0:
-                return self.avg_stay_weighted_sum / self.avg_stay_weight
-            return 0.0 if has_points else None
-        if metric is MonthlyMetric.bonus_payment_share:
-            if self.bonus_revenue_total > 0:
-                return _calculate_share(self.bonus_spent_sum_total, self.bonus_revenue_total)
-            return 0.0 if has_points else None
-        if metric is MonthlyMetric.services_share:
-            if self.services_revenue_total > 0:
-                return _calculate_share(
-                    self.services_amount_total, self.services_revenue_total
-                )
-            return 0.0 if has_points else None
-        return None
+        metric_handlers = {
+            MonthlyMetric.revenue: lambda: self.revenue_sum,
+            MonthlyMetric.bookings_count: lambda: float(self.bookings_sum),
+            MonthlyMetric.avg_check: lambda: (
+                self.revenue_with_bookings_sum / self.bookings_with_data
+                if self.bookings_with_data > 0
+                else 0.0 if has_points else None
+            ),
+            MonthlyMetric.level2plus_share: lambda: (
+                _calculate_share(self.lvl2p_sum, self.bookings_with_data)
+                if self.bookings_with_data > 0
+                else 0.0 if has_points else None
+            ),
+            MonthlyMetric.min_booking: lambda: (
+                self.min_booking_value
+                if self.min_booking_value is not None
+                else 0.0 if has_points else None
+            ),
+            MonthlyMetric.max_booking: lambda: (
+                self.max_booking_value
+                if self.max_booking_value is not None
+                else 0.0 if has_points else None
+            ),
+            MonthlyMetric.avg_stay_days: lambda: (
+                self.avg_stay_weighted_sum / self.avg_stay_weight
+                if self.avg_stay_weight > 0
+                else 0.0 if has_points else None
+            ),
+            MonthlyMetric.bonus_payment_share: lambda: (
+                _calculate_share(self.bonus_spent_sum_total, self.bonus_revenue_total)
+                if self.bonus_revenue_total > 0
+                else 0.0 if has_points else None
+            ),
+            MonthlyMetric.services_share: lambda: (
+                _calculate_share(self.services_amount_total, self.services_revenue_total)
+                if self.services_revenue_total > 0
+                else 0.0 if has_points else None
+            ),
+        }
+
+        handler = metric_handlers.get(metric)
+        return handler() if handler else None
 
 
 __all__ = [
