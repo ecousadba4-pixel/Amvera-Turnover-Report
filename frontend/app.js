@@ -279,6 +279,7 @@ function applyRevenueMetrics(data) {
   if (servicesShareValue) {
     servicesShareValue.textContent = fmtPct(toNumber(data.services_share), 0);
   }
+  scheduleHeightUpdate();
 }
 
 function applyServicesMetrics(data) {
@@ -292,6 +293,7 @@ function applyServicesMetrics(data) {
     empty.className = "services-empty";
     empty.textContent = "Данных за выбранный период нет";
     servicesList.append(empty);
+    scheduleHeightUpdate();
     setActiveServiceRow(null);
     if (activeMonthlyContext === MONTHLY_CONTEXT_SERVICE) {
       resetMonthlyDetails();
@@ -346,6 +348,7 @@ function applyServicesMetrics(data) {
   });
 
   servicesList.append(fragment);
+  scheduleHeightUpdate();
 
   if (activeServiceType) {
     if (nextActiveRow) {
@@ -499,6 +502,7 @@ function renderMonthlySeries(points, aggregateValue, formatValue) {
   }
 
   monthlyRows.append(fragment);
+  scheduleHeightUpdate();
 }
 
 function renderMonthlyMetrics(metric, payload) {
@@ -1376,6 +1380,9 @@ if (document.readyState === "loading") {
 }
 
 // === Автоматическая подстройка высоты iframe при изменении содержимого ===
+const HEIGHT_UPDATE_DEBOUNCE_MS = 120;
+let heightUpdateTimerId = null;
+
 function sendHeight() {
   try {
     const height = document.documentElement.scrollHeight;
@@ -1386,10 +1393,23 @@ function sendHeight() {
   }
 }
 
+function scheduleHeightUpdate() {
+  if (heightUpdateTimerId !== null) {
+    clearTimeout(heightUpdateTimerId);
+  }
+  heightUpdateTimerId = setTimeout(() => {
+    heightUpdateTimerId = null;
+    sendHeight();
+  }, HEIGHT_UPDATE_DEBOUNCE_MS);
+}
+
 // Отправляем высоту после загрузки и при изменениях DOM
-window.addEventListener('load', sendHeight);
-window.addEventListener('resize', sendHeight);
-new MutationObserver(sendHeight).observe(document.body, { childList: true, subtree: true });
+window.addEventListener('load', scheduleHeightUpdate);
+window.addEventListener('resize', scheduleHeightUpdate);
+new MutationObserver(scheduleHeightUpdate).observe(document.body, {
+  childList: true,
+  subtree: true,
+});
 
 // На всякий случай — повторно через 1 секунду (для динамических графиков/загрузок)
 setTimeout(sendHeight, 1000);
