@@ -34,7 +34,7 @@
       </div>
 
       <div class="card analytics-card" id="analyticsCard">
-        <div class="section-switch" role="tablist" aria-label="Выбор раздела аналитики">
+        <div class="section-switch section-switch--equal" role="tablist" aria-label="Выбор раздела аналитики">
           <button
             class="section-switch__btn is-active"
             type="button"
@@ -115,10 +115,10 @@
       <div class="card monthly-card" id="monthlyDetails" aria-live="polite">
         <div class="monthly-header">
           <div class="monthly-title" id="monthlyTitle">Помесячная динамика</div>
-          <div class="monthly-range" role="radiogroup" aria-label="Выбор периода">
+          <div class="monthly-range section-switch section-switch--equal" role="radiogroup" aria-label="Выбор периода">
             <button
               type="button"
-              class="monthly-range__btn is-active"
+              class="section-switch__btn monthly-range__btn is-active"
               data-monthly-range="this_year"
               aria-pressed="true"
             >
@@ -126,11 +126,11 @@
             </button>
             <button
               type="button"
-              class="monthly-range__btn"
+              class="section-switch__btn monthly-range__btn"
               data-monthly-range="last_12_months"
               aria-pressed="false"
             >
-              Последние 12 месяцев
+              Последние 12 мес.
             </button>
           </div>
         </div>
