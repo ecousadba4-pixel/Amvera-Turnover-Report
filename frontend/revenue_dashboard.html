@@ -33,68 +33,70 @@
         <div class="form-error" id="filterError" role="alert" aria-live="assertive" hidden></div>
       </div>
 
-      <div class="section-switch" role="tablist" aria-label="Выбор раздела аналитики">
-        <button
-          class="section-switch__btn is-active"
-          type="button"
-          data-section-target="revenue"
-          id="tabRevenue"
-          role="tab"
-          aria-selected="true"
-          aria-controls="revenueSection"
-        >
-          Выручка
-        </button>
-        <button
-          class="section-switch__btn"
-          type="button"
-          data-section-target="services"
-          id="tabServices"
-          role="tab"
-          aria-selected="false"
-          aria-controls="servicesSection"
-          tabindex="-1"
-        >
-          Услуги
-        </button>
-      </div>
+      <div class="card analytics-card" id="analyticsCard">
+        <div class="section-switch" role="tablist" aria-label="Выбор раздела аналитики">
+          <button
+            class="section-switch__btn is-active"
+            type="button"
+            data-section-target="revenue"
+            id="tabRevenue"
+            role="tab"
+            aria-selected="true"
+            aria-controls="revenueSection"
+          >
+            Выручка
+          </button>
+          <button
+            class="section-switch__btn"
+            type="button"
+            data-section-target="services"
+            id="tabServices"
+            role="tab"
+            aria-selected="false"
+            aria-controls="servicesSection"
+            tabindex="-1"
+          >
+            Услуги
+          </button>
+        </div>
 
-      <div class="info-summary" id="revenueSection" role="tabpanel" aria-labelledby="tabRevenue" aria-hidden="false">
-        <div class="summary-card summary-card--revenue">
-          <div class="summary-label">Выручка всего</div>
-          <div class="summary-value" id="revenue">—</div>
-        </div>
-        <div class="summary-card summary-card--count">
-          <div class="summary-label">Кол-во номеров</div>
-          <div class="summary-value" id="count">—</div>
-        </div>
-        <div class="summary-card summary-card--repeat">
-          <div class="summary-label">Повт. клиенты</div>
-          <div class="summary-value" id="share">—</div>
-        </div>
-        <div class="summary-card summary-card--average">
-          <div class="summary-label">Средний чек</div>
-          <div class="summary-value" id="avg">—</div>
-        </div>
-        <div class="summary-card summary-card--min">
-          <div class="summary-label">Мин. чек</div>
-          <div class="summary-value" id="min">—</div>
-        </div>
-        <div class="summary-card summary-card--max">
-          <div class="summary-label">Макс. чек</div>
-          <div class="summary-value" id="max">—</div>
-        </div>
-        <div class="summary-card summary-card--stay">
-          <div class="summary-label">Ср. срок прожив.</div>
-          <div class="summary-value" id="stay">—</div>
-        </div>
-        <div class="summary-card summary-card--bonus">
-          <div class="summary-label">Оплата бонусами</div>
-          <div class="summary-value" id="bonus">—</div>
-        </div>
-        <div class="summary-card summary-card--services">
-          <div class="summary-label">Доля услуг</div>
-          <div class="summary-value" id="servicesShare">—</div>
+        <div class="info-summary" id="revenueSection" role="tabpanel" aria-labelledby="tabRevenue" aria-hidden="false">
+          <div class="summary-card summary-card--revenue">
+            <div class="summary-label">Выручка всего</div>
+            <div class="summary-value" id="revenue">—</div>
+          </div>
+          <div class="summary-card summary-card--count">
+            <div class="summary-label">Кол-во номеров</div>
+            <div class="summary-value" id="count">—</div>
+          </div>
+          <div class="summary-card summary-card--repeat">
+            <div class="summary-label">Повт. клиенты</div>
+            <div class="summary-value" id="share">—</div>
+          </div>
+          <div class="summary-card summary-card--average">
+            <div class="summary-label">Средний чек</div>
+            <div class="summary-value" id="avg">—</div>
+          </div>
+          <div class="summary-card summary-card--min">
+            <div class="summary-label">Мин. чек</div>
+            <div class="summary-value" id="min">—</div>
+          </div>
+          <div class="summary-card summary-card--max">
+            <div class="summary-label">Макс. чек</div>
+            <div class="summary-value" id="max">—</div>
+          </div>
+          <div class="summary-card summary-card--stay">
+            <div class="summary-label">Ср. срок прожив.</div>
+            <div class="summary-value" id="stay">—</div>
+          </div>
+          <div class="summary-card summary-card--bonus">
+            <div class="summary-label">Оплата бонусами</div>
+            <div class="summary-value" id="bonus">—</div>
+          </div>
+          <div class="summary-card summary-card--services">
+            <div class="summary-label">Доля услуг</div>
+            <div class="summary-value" id="servicesShare">—</div>
+          </div>
         </div>
       </div>
 
