@@ -13,7 +13,6 @@ from psycopg_pool import AsyncConnectionPool
 __all__ = [
     "fetchone",
     "fetchall",
-    "get_conn",
     "close_all_pools",
     "use_database",
 ]
