@@ -86,7 +86,8 @@ body {
   box-shadow: 0 16px 40px rgba(138, 157, 76, 0.22);
 }
 
-.filter-card:hover {
+.filter-card:hover,
+.analytics-card:hover {
   transform: none;
   box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
 }
