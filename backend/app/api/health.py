@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from app.settings import get_settings
+
+router = APIRouter()
+settings = get_settings()
+
+
+@router.get("/health")
+def health() -> dict[str, object]:
+    return {"ok": True, "env": settings.app_env}
+
+
+__all__ = ["router"]

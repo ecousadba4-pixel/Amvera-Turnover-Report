@@ -1,5 +1,6 @@
 import hashlib
 import string
+from functools import lru_cache
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,5 +35,6 @@ class Settings(BaseSettings):
         # treat non-hex values as plain-text passwords and hash them automatically
         return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
 
+@lru_cache
 def get_settings() -> "Settings":
     return Settings()
