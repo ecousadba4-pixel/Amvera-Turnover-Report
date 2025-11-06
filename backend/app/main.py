@@ -29,7 +29,21 @@ def create_app() -> FastAPI:
 def _configure_cors(app: FastAPI) -> None:
     settings = get_settings()
 
-    raw_origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
+    def _normalize_origin(origin: str) -> str:
+        cleaned = origin.strip()
+        if not cleaned:
+            return ""
+        if cleaned == "*":
+            return "*"
+        if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            cleaned = cleaned.rstrip("/")
+        return cleaned
+
+    raw_origins = [
+        normalized
+        for origin in settings.cors_allow_origins.split(",")
+        if (normalized := _normalize_origin(origin))
+    ]
 
     allow_all_origins = not raw_origins or any(origin == "*" for origin in raw_origins)
     allow_origin_regex = None
