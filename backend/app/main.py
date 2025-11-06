@@ -29,14 +29,17 @@ def create_app() -> FastAPI:
 
 def _configure_cors(app: FastAPI) -> None:
     origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
-    if origins:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=origins,
-            allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["*"],
-            allow_credentials=False,
-        )
+
+    allow_all_origins = not origins
+    configured_origins = ["*"] if allow_all_origins else origins
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=configured_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        allow_credentials=False,
+    )
 
 
 app = create_app()
