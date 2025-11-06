@@ -354,16 +354,25 @@ function calculateMonthlyAggregate(metric, points) {
   const values = points
     .map((point) => (point ? point.value : null))
     .filter((value) => value !== null && value !== undefined)
-    .map((value) => toNumber(value));
+    .map((value) => toNumber(value))
+    .filter((value) => Number.isFinite(value));
 
   if (values.length === 0) {
     return null;
   }
 
+  if (metric === "min_booking") {
+    return Math.min(...values);
+  }
+
+  if (metric === "max_booking") {
+    return Math.max(...values);
+  }
+
   const type = cfg.format && cfg.format.type;
   if (type === "percent") {
     const sum = values.reduce((acc, value) => acc + value, 0);
-    return sum / values.length;
+    return values.length ? sum / values.length : 0;
   }
 
   return values.reduce((acc, value) => acc + value, 0);
@@ -428,8 +437,13 @@ function renderMonthlyMetrics(metric, payload) {
     fragment.append(row);
   });
 
-  const aggregateValue = calculateMonthlyAggregate(metric, sortedPoints);
-  if (aggregateValue !== null) {
+  const hasAggregate =
+    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate");
+  const aggregateValue = hasAggregate
+    ? payload.aggregate
+    : calculateMonthlyAggregate(metric, sortedPoints);
+
+  if (aggregateValue !== null && aggregateValue !== undefined) {
     const totalRow = document.createElement("div");
     totalRow.className = "monthly-row monthly-row--total";
 
