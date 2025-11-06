@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- мягкая защита от кэша лоадера -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Loading…</title>
+  <style>
+    html,body{height:100%;margin:0}
+    .center{height:100%;display:grid;place-items:center;font:16px/1.4 system-ui,sans-serif;color:#666}
+  </style>
+</head>
+<body>
+  <div class="center">Загружаем дашборд…</div>
+  <script>
+    (async () => {
+      // По умолчанию — текущий timestamp (если вдруг version.json не прочитался)
+      let v = String(Date.now());
+      try {
+        // Тянем версию, которую пишет workflow при каждом деплое
+        const res = await fetch('version.json?rand=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.version) v = data.version;
+        }
+      } catch (e) { /* ok */ }
+      // Редирект внутри iframe на файл с параметром версии
+      location.replace('revenue_dashboard.html?v=' + encodeURIComponent(v));
+    })();
+  </script>
+</body>
+</html>
