@@ -71,7 +71,8 @@ const monthlyRangeButtons = $$('[data-monthly-range]');
 
 const presetButtons = [btnCurMonth, btnPrevMonth];
 
-const STORAGE_KEY = "u4sRevenueAuthHash";
+const STORAGE_KEY = "u4sRevenueAuthSession";
+const TOKEN_STORAGE_VERSION = 1;
 const FETCH_DEBOUNCE_DELAY = 600;
 
 const MONTHLY_RANGE_THIS_YEAR = "this_year";
@@ -186,6 +187,97 @@ function canUseSessionStorage() {
   }
 }
 
+function readStoredSession() {
+  if (!canUseSessionStorage()) {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== TOKEN_STORAGE_VERSION) {
+      return null;
+    }
+    const token = typeof parsed.token === "string" ? parsed.token.trim() : "";
+    const expiresAt = Number(parsed.expiresAt || 0);
+    if (!token) {
+      return null;
+    }
+    if (expiresAt && Date.now() >= expiresAt) {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return { token, expiresAt };
+  } catch (e) {
+    console.warn("Не удалось прочитать сохранённый токен из sessionStorage", e);
+    try {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+function persistSession(session) {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+  try {
+    if (!session || !session.token) {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+    const payload = {
+      version: TOKEN_STORAGE_VERSION,
+      token: session.token,
+      expiresAt: session.expiresAt || 0,
+    };
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.warn("Не удалось сохранить токен в sessionStorage", e);
+  }
+}
+
+function setAuthSession(token, expiresAt) {
+  authToken = token || null;
+  authTokenExpiresAt = expiresAt || 0;
+}
+
+function clearAuthSession() {
+  setAuthSession(null, 0);
+}
+
+function hasValidAuthSession() {
+  if (!authToken) {
+    return false;
+  }
+  if (authTokenExpiresAt && Date.now() >= authTokenExpiresAt) {
+    return false;
+  }
+  return true;
+}
+
+function ensureAuthSession() {
+  if (!authToken) {
+    return false;
+  }
+  if (authTokenExpiresAt && Date.now() >= authTokenExpiresAt) {
+    handleAuthFailure("Сессия истекла. Авторизуйтесь повторно.");
+    return false;
+  }
+  return true;
+}
+
+function getAuthorizationHeader() {
+  if (!hasValidAuthSession()) {
+    return {};
+  }
+  return { Authorization: `Bearer ${authToken}` };
+}
+
 function showError(message) {
   if (!filterError) {
     return;
@@ -206,7 +298,8 @@ const fmtPct = (v, fractionDigits = 1) =>
 const fmtNumber = (v, fractionDigits = 0) =>
   getNumberFormatter(fractionDigits).format(v);
 
-let authHash = null;
+let authToken = null;
+let authTokenExpiresAt = 0;
 let revenueFetchTimer = null;
 let servicesFetchTimer = null;
 const controllers = {
@@ -394,43 +487,6 @@ function formatMonthlyValue(metric, value) {
   return suffix ? `${formatted}${suffix}` : formatted;
 }
 
-function calculateMonthlyAggregate(metric, points) {
-  if (!Array.isArray(points) || points.length === 0) {
-    return null;
-  }
-
-  const cfg = MONTHLY_METRIC_CONFIG[metric];
-  if (!cfg) {
-    return null;
-  }
-
-  const values = points
-    .map((point) => (point ? point.value : null))
-    .filter((value) => value !== null && value !== undefined)
-    .map((value) => toNumber(value))
-    .filter((value) => Number.isFinite(value));
-
-  if (values.length === 0) {
-    return null;
-  }
-
-  if (metric === "min_booking") {
-    return Math.min(...values);
-  }
-
-  if (metric === "max_booking") {
-    return Math.max(...values);
-  }
-
-  const type = cfg.format && cfg.format.type;
-  if (type === "percent") {
-    const sum = values.reduce((acc, value) => acc + value, 0);
-    return values.length ? sum / values.length : 0;
-  }
-
-  return values.reduce((acc, value) => acc + value, 0);
-}
-
 function showMonthlyMessage(message) {
   if (monthlyEmpty) {
     monthlyEmpty.textContent = message;
@@ -518,11 +574,10 @@ function renderMonthlyMetrics(metric, payload) {
   }
 
   const points = Array.isArray(payload.points) ? payload.points : [];
-  const hasAggregate =
-    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate");
-  const aggregateValue = hasAggregate
-    ? payload.aggregate
-    : calculateMonthlyAggregate(metric, points);
+  const aggregateValue =
+    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate")
+      ? payload.aggregate
+      : null;
 
   renderMonthlySeries(points, aggregateValue, (value) =>
     formatMonthlyValue(metric, value)
@@ -542,17 +597,16 @@ function renderMonthlyService(serviceType, payload) {
   }
 
   const points = Array.isArray(payload.points) ? payload.points : [];
-  const hasAggregate =
-    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate");
-  const aggregateValue = hasAggregate
-    ? payload.aggregate
-    : points.reduce((acc, point) => acc + toNumber(point && point.value), 0);
+  const aggregateValue =
+    payload && Object.prototype.hasOwnProperty.call(payload, "aggregate")
+      ? payload.aggregate
+      : null;
 
   renderMonthlySeries(points, aggregateValue, (value) => fmtRub(value));
 }
 
 async function loadMonthlyMetric(metric, range) {
-  if (!authHash) {
+  if (!ensureAuthSession()) {
     return false;
   }
   if (!API_BASE) {
@@ -582,12 +636,12 @@ async function loadMonthlyMetric(metric, range) {
 
   try {
     const resp = await fetch(url, {
-      headers: { "X-Auth-Hash": authHash },
+      headers: getAuthorizationHeader(),
       signal: controller.signal,
     });
 
     if (resp.status === 401 || resp.status === 403) {
-      handleAuthFailure("Неверный пароль или сессия истекла.");
+      handleAuthFailure("Неверный токен или сессия истекла.");
       showMonthlyMessage("Для просмотра требуется авторизация");
       return false;
     }
@@ -615,7 +669,7 @@ async function loadMonthlyMetric(metric, range) {
 }
 
 async function loadMonthlyService(serviceType, range) {
-  if (!authHash) {
+  if (!ensureAuthSession()) {
     return false;
   }
   if (!API_BASE) {
@@ -649,12 +703,12 @@ async function loadMonthlyService(serviceType, range) {
 
   try {
     const resp = await fetch(url, {
-      headers: { "X-Auth-Hash": authHash },
+      headers: getAuthorizationHeader(),
       signal: controller.signal,
     });
 
     if (resp.status === 401 || resp.status === 403) {
-      handleAuthFailure("Неверный пароль или сессия истекла.");
+      handleAuthFailure("Неверный токен или сессия истекла.");
       showMonthlyMessage("Для просмотра требуется авторизация");
       return false;
     }
@@ -722,7 +776,7 @@ function handleSummaryCardClick(card, metric) {
     return;
   }
 
-  if (!authHash) {
+  if (!hasValidAuthSession()) {
     showGate();
     return;
   }
@@ -767,7 +821,7 @@ function handleServiceNameClick(row, serviceType) {
     return;
   }
 
-  if (!authHash) {
+  if (!hasValidAuthSession()) {
     showGate();
     return;
   }
@@ -892,33 +946,6 @@ function isAbortError(error) {
   return Boolean(error && error.name === "AbortError");
 }
 
-function getStoredHash() {
-  if (!canUseSessionStorage()) {
-    return null;
-  }
-  try {
-    return window.sessionStorage.getItem(STORAGE_KEY);
-  } catch (e) {
-    console.warn("Не удалось прочитать сохранённый пароль из sessionStorage", e);
-    return null;
-  }
-}
-
-function persistHash(hash) {
-  if (!canUseSessionStorage()) {
-    return;
-  }
-  try {
-    if (hash) {
-      window.sessionStorage.setItem(STORAGE_KEY, hash);
-    } else {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-    }
-  } catch (e) {
-    console.warn("Не удалось сохранить пароль в sessionStorage", e);
-  }
-}
-
 function showGate(message = "") {
   gate.style.display = "flex";
   errBox.textContent = message;
@@ -1002,20 +1029,13 @@ function setRangeToLastMonth() {
   setLastMonthRange(rangeInputs);
 }
 
-async function sha256Hex(str) {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(str));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function handleAuthFailure(message) {
-  persistHash(null);
-  authHash = null;
+  persistSession(null);
+  clearAuthSession();
   requestCache.clear();
   lastTriggeredRange.from = null;
   lastTriggeredRange.to = null;
+  servicesDirty = true;
   resetMonthlyDetails();
   showGate(message);
 }
@@ -1030,7 +1050,7 @@ async function loadMetrics({
   onError,
   includeDateField = true,
 }) {
-  if (!authHash) {
+  if (!ensureAuthSession()) {
     return false;
   }
   if (!API_BASE) {
@@ -1075,12 +1095,12 @@ async function loadMetrics({
 
   try {
     const resp = await fetch(url, {
-      headers: { "X-Auth-Hash": authHash },
+      headers: getAuthorizationHeader(),
       signal: controller.signal,
     });
 
     if (resp.status === 401 || resp.status === 403) {
-      handleAuthFailure("Неверный пароль или сессия истекла.");
+      handleAuthFailure("Неверный токен или сессия истекла.");
       if (typeof onAuthError === "function") {
         onAuthError();
       }
@@ -1271,7 +1291,7 @@ function applySection(section) {
 
   if (
     !isRevenue &&
-    authHash &&
+    hasValidAuthSession() &&
     servicesDirty &&
     !getSectionController(SECTION_SERVICES) &&
     servicesFetchTimer === null
@@ -1293,6 +1313,35 @@ function bindSectionSwitch() {
   });
 }
 
+async function authenticate(password) {
+  if (!API_BASE) {
+    throw new Error("Базовый URL API не сконфигурирован");
+  }
+
+  const resp = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+
+  if (resp.status === 401 || resp.status === 403) {
+    throw new Error("Неверный пароль");
+  }
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  const token = typeof data.access_token === "string" ? data.access_token.trim() : "";
+  if (!token) {
+    throw new Error("Токен авторизации не получен");
+  }
+  const expiresInSeconds = Number(data.expires_in || 0);
+  const expiresAt = expiresInSeconds > 0 ? Date.now() + expiresInSeconds * 1000 : 0;
+  return { token, expiresAt };
+}
+
 function bindPasswordForm() {
   goBtn.addEventListener("click", async () => {
     const pwd = (pwdInput.value || "").trim();
@@ -1306,10 +1355,11 @@ function bindPasswordForm() {
     errBox.textContent = "";
 
     try {
-      authHash = await sha256Hex(pwd);
+      const session = await authenticate(pwd);
+      setAuthSession(session.token, session.expiresAt);
+      persistSession(session);
       requestCache.clear();
       resetMonthlyDetails();
-      persistHash(authHash);
       if (!fromDate.value || !toDate.value) {
         setRangeToCurrentMonth();
       }
@@ -1327,7 +1377,7 @@ function bindPasswordForm() {
         servicesDirty = true;
       }
     } catch (e) {
-      errBox.textContent = `Ошибка загрузки: ${e.message}`;
+      errBox.textContent = `Ошибка авторизации: ${e.message}`;
     } finally {
       goBtn.disabled = false;
     }
@@ -1359,14 +1409,15 @@ function applyInitialSectionState() {
 }
 
 function restoreSessionFromStorage() {
-  const stored = getStoredHash();
+  const stored = readStoredSession();
   if (stored) {
-    authHash = stored;
+    setAuthSession(stored.token, stored.expiresAt);
     requestCache.clear();
     hideGate();
     fetchRevenueMetrics();
     fetchServicesMetrics();
   } else {
+    clearAuthSession();
     showGate();
   }
 }

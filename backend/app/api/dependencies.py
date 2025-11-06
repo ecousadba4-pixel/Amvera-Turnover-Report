@@ -1,34 +1,32 @@
 from __future__ import annotations
 
-from hmac import compare_digest
 from typing import Annotated, Optional
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, status
 
+from app.core.security import TokenError, TokenPayload, verify_access_token
 from app.settings import get_settings
 
 settings = get_settings()
-ADMIN_HASH = settings.admin_password_sha256.lower()
 
-AuthHeader = Annotated[Optional[str], Header(alias="X-Auth-Hash", convert_underscores=False)]
+AuthHeader = Annotated[Optional[str], Header(alias="Authorization", convert_underscores=False)]
 
 
-def require_admin_auth(x_auth_hash: AuthHeader) -> str:
-    if not x_auth_hash:
-        raise HTTPException(status_code=401, detail="Missing auth")
+def require_admin_auth(authorization: AuthHeader) -> TokenPayload:
+    if not authorization:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
 
-    normalized = x_auth_hash.strip().lower()
-    if not normalized:
-        raise HTTPException(status_code=401, detail="Missing auth")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization scheme")
 
-    if not compare_digest(normalized, ADMIN_HASH):
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    return normalized
+    try:
+        return verify_access_token(token=token.strip(), secret=settings.auth_token_secret)
+    except TokenError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
 
 __all__ = [
-    "ADMIN_HASH",
     "AuthHeader",
     "require_admin_auth",
 ]

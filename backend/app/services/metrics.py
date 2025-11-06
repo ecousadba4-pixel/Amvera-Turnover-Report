@@ -14,6 +14,7 @@ from app.core.dates import (
 )
 from app.core.numbers import as_float
 from app.db import fetchall, fetchone
+from app.db.query_loader import load_query
 from app.schemas.enums import DateField, MonthlyMetric, MonthlyRange
 from app.schemas.responses import (
     MetricsResponse,
@@ -50,37 +51,10 @@ async def get_metrics(
     )
     params.update(services_params)
 
-    query = sql.SQL(
-        """
-      WITH base AS (
-        SELECT
-          g.total_amount,
-          g.loyalty_level,
-          g.created_at,
-          g.checkin_date,
-          g.bonus_spent
-        FROM guests AS g
-        WHERE 1=1
-          {filters}
-      )
-      SELECT
-        COUNT(*)::int AS bookings_count,
-        COALESCE(SUM(total_amount), 0)::numeric AS revenue,
-        COALESCE(MIN(total_amount), 0)::numeric AS min_booking,
-        COALESCE(MAX(total_amount), 0)::numeric AS max_booking,
-        COALESCE(AVG(total_amount), 0)::numeric AS avg_check,
-        COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END), 0)::int AS lvl2p,
-        COALESCE(AVG((created_at::date - checkin_date)::numeric), 0)::numeric AS avg_stay_days,
-        COALESCE(SUM(bonus_spent), 0)::numeric AS bonus_spent_sum,
-        (
-          SELECT COALESCE(SUM(u.total_amount), 0)::numeric
-          FROM uslugi_daily_mv AS u
-          WHERE 1=1
-            {services_filters}
-        ) AS services_amount
-      FROM base
-    """
-    ).format(filters=filters, services_filters=services_filters)
+    query = load_query("metrics_summary.sql").format(
+        filters=filters,
+        services_filters=services_filters,
+    )
 
     row = await fetchone(dsn, query, params) or {}
 
@@ -126,63 +100,7 @@ async def get_services(
 
     offset = (page - 1) * page_size
 
-    query = sql.SQL(
-        """
-      WITH aggregated AS (
-        SELECT
-          COALESCE(u.uslugi_type, 'Без категории') AS service_type,
-          COALESCE(SUM(u.total_amount), 0)::numeric AS total_amount
-        FROM uslugi_daily_mv AS u
-        WHERE 1=1
-          {filters}
-        GROUP BY COALESCE(u.uslugi_type, 'Без категории')
-      ),
-      ranked AS (
-        SELECT
-          service_type,
-          total_amount,
-          ROW_NUMBER() OVER (ORDER BY total_amount DESC, service_type) AS row_number,
-          COUNT(*) OVER () AS total_items,
-          COALESCE(SUM(total_amount) OVER (), 0)::numeric AS overall_amount
-        FROM aggregated
-      ),
-      limited AS (
-        SELECT
-          service_type,
-          total_amount,
-          total_items,
-          overall_amount,
-          FALSE AS is_summary,
-          row_number AS sort_order
-        FROM ranked
-        WHERE row_number > %(offset)s
-          AND row_number <= %(offset)s + %(limit)s
-      ),
-      summary AS (
-        SELECT
-          NULL::text AS service_type,
-          NULL::numeric AS total_amount,
-          COALESCE(MAX(total_items), 0)::int AS total_items,
-          COALESCE(MAX(overall_amount), 0)::numeric AS overall_amount,
-          TRUE AS is_summary,
-          (%(offset)s + %(limit)s + 1) AS sort_order
-        FROM ranked
-      ),
-      combined AS (
-        SELECT * FROM limited
-        UNION ALL
-        SELECT * FROM summary
-      )
-      SELECT
-        service_type,
-        total_amount,
-        total_items,
-        overall_amount,
-        is_summary
-      FROM combined
-      ORDER BY sort_order
-    """
-    ).format(filters=filters)
+    query = load_query("services_listing.sql").format(filters=filters)
 
     query_params = {**params, "limit": page_size, "offset": offset}
 
@@ -259,63 +177,7 @@ async def get_monthly_metrics(
         "series_end": end_month,
     }
 
-    query = sql.SQL(
-        """
-      WITH months AS (
-        SELECT generate_series(%(series_start)s::date, %(series_end)s::date, interval '1 month')::date AS month_start
-      ),
-      guests_base AS (
-        SELECT
-          DATE_TRUNC('month', g.{date_column})::date AS month_start,
-          g.total_amount,
-          g.loyalty_level,
-          g.created_at,
-          g.checkin_date,
-          g.bonus_spent
-        FROM guests AS g
-        WHERE 1=1
-          {filters}
-      ),
-      guests_agg AS (
-        SELECT
-          month_start,
-          COUNT(*)::int AS bookings_count,
-          COALESCE(SUM(total_amount), 0)::numeric AS revenue,
-          COALESCE(MIN(total_amount), 0)::numeric AS min_booking,
-          COALESCE(MAX(total_amount), 0)::numeric AS max_booking,
-          COALESCE(AVG(total_amount), 0)::numeric AS avg_check,
-          COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END), 0)::int AS lvl2p,
-          COALESCE(AVG((created_at::date - checkin_date)::numeric), 0)::numeric AS avg_stay_days,
-          COALESCE(SUM(bonus_spent), 0)::numeric AS bonus_spent_sum
-        FROM guests_base
-        GROUP BY month_start
-      ),
-      services_agg AS (
-        SELECT
-          DATE_TRUNC('month', u.consumption_date)::date AS month_start,
-          COALESCE(SUM(u.total_amount), 0)::numeric AS services_amount
-        FROM uslugi_daily_mv AS u
-        WHERE 1=1
-          {services_filters}
-        GROUP BY DATE_TRUNC('month', u.consumption_date)
-      )
-      SELECT
-        m.month_start,
-        COALESCE(g.bookings_count, 0)::int AS bookings_count,
-        COALESCE(g.revenue, 0)::numeric AS revenue,
-        COALESCE(g.min_booking, 0)::numeric AS min_booking,
-        COALESCE(g.max_booking, 0)::numeric AS max_booking,
-        COALESCE(g.avg_check, 0)::numeric AS avg_check,
-        COALESCE(g.lvl2p, 0)::int AS lvl2p,
-        COALESCE(g.avg_stay_days, 0)::numeric AS avg_stay_days,
-        COALESCE(g.bonus_spent_sum, 0)::numeric AS bonus_spent_sum,
-        COALESCE(s.services_amount, 0)::numeric AS services_amount
-      FROM months AS m
-      LEFT JOIN guests_agg AS g ON g.month_start = m.month_start
-      LEFT JOIN services_agg AS s ON s.month_start = m.month_start
-      ORDER BY m.month_start
-    """
-    ).format(
+    query = load_query("metrics_monthly.sql").format(
         date_column=sql.Identifier(resolution.column),
         filters=filters,
         services_filters=services_filters,
@@ -452,35 +314,10 @@ async def get_monthly_services(
         "\n          AND COALESCE(u.uslugi_type, 'Без категории') = %(service_type)s"
     )
 
-    query = sql.SQL(
-        """
-      WITH months AS (
-        SELECT generate_series(%(series_start)s::date, %(series_end)s::date, interval '1 month')::date AS month_start
-      ),
-      services_base AS (
-        SELECT
-          DATE_TRUNC('month', u.consumption_date)::date AS month_start,
-          COALESCE(u.total_amount, 0)::numeric AS total_amount
-        FROM uslugi_daily_mv AS u
-        WHERE 1=1
-          {filters}
-          {service_filter}
-      ),
-      services_agg AS (
-        SELECT
-          month_start,
-          COALESCE(SUM(total_amount), 0)::numeric AS total_amount
-        FROM services_base
-        GROUP BY month_start
-      )
-      SELECT
-        m.month_start,
-        COALESCE(s.total_amount, 0)::numeric AS total_amount
-      FROM months AS m
-      LEFT JOIN services_agg AS s ON s.month_start = m.month_start
-      ORDER BY m.month_start
-    """
-    ).format(filters=filters, service_filter=service_clause)
+    query = load_query("services_monthly.sql").format(
+        filters=filters,
+        service_filter=service_clause,
+    )
 
     dsn = settings.database_url
     rows = await fetchall(dsn, query, params) or []
