@@ -10,6 +10,19 @@
   --text-primary: #1f2118;
   --text-secondary: #4a4c3d;
   --border-soft: #d9dec5;
+  --radius-card: 20px;
+  --radius-card-mobile: 14px;
+  --radius-summary: 16px;
+  --radius-summary-mobile: 12px;
+  --radius-input: 12px;
+  --radius-pill: 16px;
+  --radius-pill-mobile: 12px;
+  --radius-badge: 12px;
+  --gap-lg: 1.5rem;
+  --gap-md: 1.2rem;
+  --gap-sm: 0.75rem;
+  --card-padding: 2.25rem;
+  --card-padding-mobile: 1.25rem 1.35rem;
   --status-info-bg: #e3f2fd;
   --status-info-border: #2196f3;
   --status-warning-bg: #fff8e1;
@@ -57,13 +70,13 @@ body {
   max-width: 960px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--gap-lg);
 }
 
 .analytics-card {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--gap-lg);
 }
 
 .analytics-card .section-switch {
@@ -78,8 +91,8 @@ body {
 .card,
 .form-container {
   background: var(--surface-card);
-  padding: 2.25rem;
-  border-radius: 20px;
+  padding: var(--card-padding);
+  border-radius: var(--radius-card);
   box-shadow: 0 18px 35px rgba(66, 79, 31, 0.12);
   width: 100%;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
@@ -144,11 +157,11 @@ h2 {
 
 .form-grid {
   display: grid;
-  gap: 1.2rem;
+  gap: var(--gap-md);
 }
 
 .form-grid.two-column {
-  gap: 1.2rem 1.4rem;
+  gap: var(--gap-md) 1.4rem;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
@@ -167,7 +180,7 @@ h2 {
 .form-error {
   margin-top: 0.5rem;
   padding: 0.75rem 1rem;
-  border-radius: 12px;
+  border-radius: var(--radius-badge);
   border: 1px solid var(--status-error-border);
   background: var(--status-error-bg);
   color: var(--status-error-text);
@@ -177,7 +190,7 @@ h2 {
 :where(.form-input, .form-select, .overlay .modal input[type='password']) {
   width: 100%;
   padding: 0.85rem 1rem;
-  border-radius: 12px;
+  border-radius: var(--radius-input);
   border: 1px solid var(--border-soft);
   font-size: 1rem;
   box-sizing: border-box;
@@ -202,7 +215,6 @@ h2 {
   color: var(--text-secondary);
   cursor: not-allowed;
   border-color: var(--border-soft);
-  opacity: 0.8;
 }
 
 .help-text {
@@ -223,7 +235,7 @@ h2 {
 .section-switch {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--gap-sm);
   align-items: center;
   justify-content: flex-start;
   width: 100%;
@@ -243,7 +255,7 @@ h2 {
   width: var(--pill-width);
   min-width: var(--pill-min-width);
   padding: var(--pill-padding-block) var(--pill-padding-inline);
-  border-radius: 16px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border-soft);
   background: var(--pill-bg);
   color: var(--text-primary);
@@ -341,7 +353,7 @@ h2 {
 .message {
   margin-top: 1.2rem;
   padding: 0.95rem 1.2rem;
-  border-radius: 12px;
+  border-radius: var(--radius-badge);
   border: 1px solid transparent;
   font-weight: 600;
 }
@@ -373,7 +385,7 @@ h2 {
 
 .summary-card {
   background: rgba(138, 157, 76, 0.08);
-  border-radius: 16px;
+  border-radius: var(--radius-summary);
   padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;
@@ -454,13 +466,13 @@ h2 {
 .services-card {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--gap-lg);
 }
 
 .monthly-card {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--gap-lg);
 }
 
 .monthly-card:hover {
@@ -483,7 +495,7 @@ h2 {
 }
 
 .monthly-range {
-  gap: 0.75rem;
+  gap: var(--gap-sm);
 }
 
 .monthly-range__btn {
@@ -503,7 +515,7 @@ h2 {
 .monthly-table {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--gap-sm);
 }
 
 .monthly-table__rows {
@@ -571,7 +583,7 @@ h2 {
 .services-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--gap-sm);
 }
 
 .services-row {
@@ -599,7 +611,7 @@ h2 {
 
 .services-row.is-active {
   background: rgba(138, 157, 76, 0.12);
-  border-radius: 12px;
+  border-radius: var(--radius-badge);
   padding: 0.35rem 0.5rem;
 }
 
@@ -629,7 +641,7 @@ h2 {
 
 .services-empty {
   padding: 0.85rem 1rem;
-  border-radius: 12px;
+  border-radius: var(--radius-badge);
   border: 1px dashed var(--border-soft);
   color: var(--text-secondary);
   text-align: center;
@@ -700,7 +712,6 @@ body.is-loading .summary-value::after {
   content: "";
   display: block;
   width: 80%;
-  max-width: 200px;
   height: 1.1em;
   margin: 0;
   border-radius: 999px;
@@ -739,9 +750,10 @@ body.is-loading .summary-value::after {
   }
 
   .card,
-  .form-container {
-    padding: 1.25rem 1.35rem;
-    border-radius: 14px;
+  .form-container,
+  .filter-card {
+    padding: var(--card-padding-mobile);
+    border-radius: var(--radius-card-mobile);
     max-width: 100%;
     box-shadow: 0 12px 26px rgba(66, 79, 31, 0.14);
   }
@@ -780,11 +792,7 @@ body.is-loading .summary-value::after {
     flex: 1 1 auto;
     padding: 0.55rem 0.75rem;
     font-size: 0.85rem;
-    border-radius: 12px;
-  }
-
-  .filter-card {
-    padding: 1.25rem 1.35rem;
+    border-radius: var(--radius-pill-mobile);
   }
 
   .filter-card .card-header {
@@ -806,11 +814,11 @@ body.is-loading .summary-value::after {
     width: 100%;
     padding: 0.55rem 0.9rem;
     font-size: 0.9rem;
-    border-radius: 12px;
+    border-radius: var(--radius-pill-mobile);
   }
 
   .form-grid {
-    gap: 0.75rem;
+    gap: var(--gap-sm);
   }
 
   .form-grid.two-column {
@@ -850,7 +858,7 @@ body.is-loading .summary-value::after {
 
   .summary-card {
     padding: 0.7rem 0.8rem;
-    border-radius: 12px;
+    border-radius: var(--radius-summary-mobile);
   }
 
   .summary-value {
@@ -997,7 +1005,7 @@ body.is-loading .summary-value::after {
 
 .overlay .modal {
   background: var(--surface-card);
-  border-radius: 20px;
+  border-radius: var(--radius-card);
   padding: 2rem;
   max-width: 420px;
   width: min(92vw, 420px);
