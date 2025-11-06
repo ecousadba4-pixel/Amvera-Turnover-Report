@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Tuple, TypeVar
+from types import MappingProxyType
+from typing import AsyncIterator, Awaitable, Callable, Dict, Mapping, Optional, Tuple, TypeVar, cast
 
 import psycopg
 from psycopg.rows import dict_row
@@ -119,41 +120,48 @@ async def _run_with_retry(
             await _reset_pool(resolved_dsn)
 
 
+RowMapping = Mapping[str, object]
+_EMPTY_PARAMS: Mapping[str, object] = MappingProxyType({})
+
+
 async def fetchone(
     query: psycopg.sql.Composable | str,
-    params: Optional[dict[str, Any]] = None,
+    params: Optional[RowMapping] = None,
     *,
     dsn: Optional[str] = None,
     retries: int = 1,
-) -> Optional[dict[str, Any]]:
+) -> Optional[RowMapping]:
     """Execute a query and return the first row, retrying on connection failures."""
 
-    params = params or {}
+    query_params = params if params is not None else _EMPTY_PARAMS
 
-    async def _operation(conn: psycopg.AsyncConnection) -> Optional[dict[str, Any]]:
+    async def _operation(conn: psycopg.AsyncConnection) -> Optional[RowMapping]:
         async with conn.cursor() as cur:
-            await cur.execute(query, params)
-            return await cur.fetchone()
+            await cur.execute(query, query_params)
+            row = await cur.fetchone()
+            return cast(Optional[RowMapping], row)
 
     return await _run_with_retry(dsn, _operation, retries=retries)
 
 
 async def fetchall(
     query: psycopg.sql.Composable | str,
-    params: Optional[dict[str, Any]] = None,
+    params: Optional[RowMapping] = None,
     *,
     dsn: Optional[str] = None,
     retries: int = 1,
-) -> list[dict[str, Any]]:
+) -> list[RowMapping]:
     """Execute a query and return all rows, retrying on connection failures."""
 
-    params = params or {}
+    query_params = params if params is not None else _EMPTY_PARAMS
 
-    async def _operation(conn: psycopg.AsyncConnection) -> list[dict[str, Any]]:
+    async def _operation(conn: psycopg.AsyncConnection) -> list[RowMapping]:
         async with conn.cursor() as cur:
-            await cur.execute(query, params)
+            await cur.execute(query, query_params)
             rows = await cur.fetchall()
-            return list(rows or [])
+            if not rows:
+                return []
+            return [cast(RowMapping, row) for row in rows]
 
     return await _run_with_retry(dsn, _operation, retries=retries)
 
