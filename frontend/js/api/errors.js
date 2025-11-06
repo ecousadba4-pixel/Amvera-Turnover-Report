@@ -19,19 +19,16 @@ export async function readResponseError(resp) {
     if (Array.isArray(detail)) {
       const messages = detail
         .map((item) => {
-          if (item && typeof item === "object") {
-            if (typeof item.msg === "string" && item.msg.trim()) {
-              return item.msg.trim();
-            }
-            if (typeof item.detail === "string" && item.detail.trim()) {
-              return item.detail.trim();
-            }
+          const message = typeof item?.msg === "string" ? item.msg.trim() : "";
+          if (message) {
+            return message;
           }
-          return null;
+          const itemDetail = typeof item?.detail === "string" ? item.detail.trim() : "";
+          return itemDetail || null;
         })
         .filter(Boolean);
       if (messages.length) {
-        return { detail, message: messages.join("; ") };
+        return { detail, message: messages.join("; ") }; 
       }
     }
     if (detail && typeof detail === "object") {
@@ -70,16 +67,11 @@ export function isDateFieldValidationError(error) {
   }
   if (Array.isArray(detail)) {
     return detail.some((item) => {
-      if (!item || typeof item !== "object") {
-        return false;
-      }
-      if (Array.isArray(item.loc) && item.loc.includes("date_field")) {
+      if (Array.isArray(item?.loc) && item.loc.includes("date_field")) {
         return true;
       }
-      if (typeof item.msg === "string" && item.msg.toLowerCase().includes("date_field")) {
-        return true;
-      }
-      return false;
+      const message = typeof item?.msg === "string" ? item.msg.toLowerCase() : "";
+      return message.includes("date_field");
     });
   }
   if (detail && typeof detail === "object") {
@@ -97,11 +89,12 @@ export function isDateFieldValidationError(error) {
 }
 
 export function isAuthError(error) {
-  return Boolean(error && (error.status === 401 || error.status === 403));
+  const status = error?.status;
+  return status === 401 || status === 403;
 }
 
 export function isAbortError(error) {
-  return Boolean(error && error.name === "AbortError");
+  return error?.name === "AbortError";
 }
 
 export function isLikelyNetworkError(error) {
@@ -111,6 +104,6 @@ export function isLikelyNetworkError(error) {
   if (error.name === "TypeError") {
     return true;
   }
-  const message = String(error.message || "").toLowerCase();
+  const message = String(error?.message ?? "").toLowerCase();
   return message.includes("failed to fetch") || message.includes("networkerror");
 }
