@@ -4,7 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from types import MappingProxyType
-from typing import AsyncIterator, Awaitable, Callable, Dict, Mapping, Optional, Tuple, TypeVar, cast
+from typing import AsyncIterator, Awaitable, Callable, Mapping, Optional, TypeVar, cast
 
 import psycopg
 from psycopg.rows import dict_row
@@ -19,11 +19,9 @@ __all__ = [
 ]
 
 _pool_lock = asyncio.Lock()
-_pools: Dict[str, AsyncConnectionPool] = {}
-
+_pools: dict[str, AsyncConnectionPool] = {}
 
 _current_dsn: ContextVar[Optional[str]] = ContextVar("current_db_dsn", default=None)
-
 
 _POOL_CONFIG = {
     "min_size": 1,
@@ -36,7 +34,6 @@ _POOL_CONFIG = {
 
 def _create_pool(dsn: str) -> AsyncConnectionPool:
     """Instantiate an async connection pool configured to return dict rows."""
-
     return AsyncConnectionPool(
         conninfo=dsn,
         kwargs={"row_factory": dict_row},
@@ -46,7 +43,6 @@ def _create_pool(dsn: str) -> AsyncConnectionPool:
 
 async def _get_or_create_pool(dsn: str) -> AsyncConnectionPool:
     """Return a cached async connection pool, creating it if necessary."""
-
     async with _pool_lock:
         pool = _pools.get(dsn)
         if pool is None:
@@ -58,10 +54,8 @@ async def _get_or_create_pool(dsn: str) -> AsyncConnectionPool:
 
 async def _reset_pool(dsn: str) -> None:
     """Close and drop the cached pool for the given DSN if it exists."""
-
     async with _pool_lock:
         pool = _pools.pop(dsn, None)
-
     if pool is not None:
         await pool.close()
 
@@ -85,7 +79,6 @@ async def use_database(dsn: str) -> AsyncIterator[None]:
 @asynccontextmanager
 async def get_conn(dsn: Optional[str] = None) -> AsyncIterator[psycopg.AsyncConnection]:
     """Yield a pooled async connection configured to return dict rows."""
-
     resolved_dsn = _resolve_dsn(dsn)
     pool = await _get_or_create_pool(resolved_dsn)
     async with pool.connection() as conn:
@@ -93,10 +86,7 @@ async def get_conn(dsn: Optional[str] = None) -> AsyncIterator[psycopg.AsyncConn
 
 
 TResult = TypeVar("TResult")
-_RETRYABLE_EXCEPTIONS: Tuple[type[Exception], ...] = (
-    psycopg.OperationalError,
-    psycopg.InterfaceError,
-)
+_RETRYABLE_EXCEPTIONS = (psycopg.OperationalError, psycopg.InterfaceError)
 
 
 async def _run_with_retry(
@@ -106,7 +96,6 @@ async def _run_with_retry(
     retries: int = 1,
 ) -> TResult:
     """Execute the given operation, retrying once on transient connection errors."""
-
     resolved_dsn = _resolve_dsn(dsn)
     attempt = 0
     while True:
@@ -132,14 +121,12 @@ async def fetchone(
     retries: int = 1,
 ) -> Optional[RowMapping]:
     """Execute a query and return the first row, retrying on connection failures."""
-
     query_params = params if params is not None else _EMPTY_PARAMS
 
     async def _operation(conn: psycopg.AsyncConnection) -> Optional[RowMapping]:
         async with conn.cursor() as cur:
             await cur.execute(query, query_params)
-            row = await cur.fetchone()
-            return cast(Optional[RowMapping], row)
+            return cast(Optional[RowMapping], await cur.fetchone())
 
     return await _run_with_retry(dsn, _operation, retries=retries)
 
@@ -152,26 +139,21 @@ async def fetchall(
     retries: int = 1,
 ) -> list[RowMapping]:
     """Execute a query and return all rows, retrying on connection failures."""
-
     query_params = params if params is not None else _EMPTY_PARAMS
 
     async def _operation(conn: psycopg.AsyncConnection) -> list[RowMapping]:
         async with conn.cursor() as cur:
             await cur.execute(query, query_params)
             rows = await cur.fetchall()
-            if not rows:
-                return []
-            return [cast(RowMapping, row) for row in rows]
+            return [cast(RowMapping, row) for row in rows] if rows else []
 
     return await _run_with_retry(dsn, _operation, retries=retries)
 
 
 async def close_all_pools() -> None:
     """Close and clear all cached async connection pools."""
-
     async with _pool_lock:
         pools = list(_pools.items())
         _pools.clear()
-
     for _, pool in pools:
         await pool.close()

@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import DatabaseSession, require_admin_auth
+from app.core.security import TokenPayload
 from app.schemas.enums import MonthlyRange
 from app.schemas.responses import MonthlyServiceResponse, ServicesResponse
 from app.services.metrics import get_monthly_services, get_services
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api/services", tags=["services"])
 @router.get("", response_model=ServicesResponse)
 async def services(
     _db: DatabaseSession,
-    _auth: str = Depends(require_admin_auth),
+    _auth: TokenPayload = Depends(require_admin_auth),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     page: int = Query(1, ge=1),
@@ -33,7 +34,7 @@ async def services(
 @router.get("/monthly", response_model=MonthlyServiceResponse)
 async def services_monthly(
     _db: DatabaseSession,
-    _auth: str = Depends(require_admin_auth),
+    _auth: TokenPayload = Depends(require_admin_auth),
     service_type: str = Query(..., min_length=1),
     range_: MonthlyRange = Query(default=MonthlyRange.this_year, alias="range"),
 ) -> MonthlyServiceResponse:

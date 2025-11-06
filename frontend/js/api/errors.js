@@ -97,13 +97,3 @@ export function isAbortError(error) {
   return error?.name === "AbortError";
 }
 
-export function isLikelyNetworkError(error) {
-  if (!error) {
-    return false;
-  }
-  if (error.name === "TypeError") {
-    return true;
-  }
-  const message = String(error?.message ?? "").toLowerCase();
-  return message.includes("failed to fetch") || message.includes("networkerror");
-}

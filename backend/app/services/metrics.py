@@ -144,28 +144,27 @@ async def get_monthly_services(
         MonthlyServicePoint(month=record.month, value=record.total_amount)
         for record in rows
     ]
-    aggregate_value = sum(record.total_amount for record in rows)
 
     return MonthlyServiceResponse(
         service_type=normalized_service,
         range=range_,
         points=points,
-        aggregate=aggregate_value,
+        aggregate=sum(record.total_amount for record in rows),
     )
 
 
 def _normalize_date_range(
     date_from: Optional[date], date_to: Optional[date]
 ) -> tuple[Optional[date], Optional[date]]:
+    """Normalize date range by swapping dates if from > to."""
     if date_from and date_to and date_from > date_to:
         return date_to, date_from
     return date_from, date_to
 
 
 def _calculate_share(numerator: float, denominator: float) -> float:
-    if denominator:
-        return float(numerator / denominator)
-    return 0.0
+    """Calculate share as numerator/denominator, returning 0.0 if denominator is zero."""
+    return float(numerator / denominator) if denominator else 0.0
 
 
 def _convert_services(listing: ServicesListingResult) -> Sequence[ServiceItem]:

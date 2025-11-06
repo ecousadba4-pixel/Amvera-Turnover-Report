@@ -1,7 +1,7 @@
 # U4S Revenue Dashboard (Amvera + Flexbe)
 
 ## Backend (FastAPI on Amvera)
-- Auth: `POST /api/auth/login` выдаёт bearer-токен. Для совместимости по-прежнему поддерживается заголовок `X-Auth-Hash` с SHA-256(пароль).
+- Auth: `POST /api/auth/login` выдаёт bearer-токен. Используйте заголовок `Authorization: Bearer <token>` для доступа к API.
 - Endpoint: `GET /api/metrics?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD&date_field=created|checkin`
 
 ### Env vars (Amvera)
