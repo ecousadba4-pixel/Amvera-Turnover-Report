@@ -1320,15 +1320,55 @@ function getMonthlyServiceCacheKey(serviceType, range) {
   return `monthly-service-${normalized}-${range}-${DATE_FIELD}`;
 }
 
-function validateDateRange(from, to) {
-  if (from && to) {
-    if (new Date(from) > new Date(to)) {
-      showError("Дата 'От' не может быть позже даты 'До'");
-      return false;
-    }
-    clearError();
-    return true;
+const isValidDateString = (value) => {
+  if (!value) {
+    return false;
   }
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime());
+};
+
+function normalizeDate(value) {
+  if (!isValidDateString(value)) {
+    return null;
+  }
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function validateDateRange(from, to) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const fromDate = normalizeDate(from);
+  const toDate = normalizeDate(to);
+
+  if (from && !fromDate) {
+    showError("Дата 'От' указана в неверном формате");
+    return false;
+  }
+
+  if (to && !toDate) {
+    showError("Дата 'До' указана в неверном формате");
+    return false;
+  }
+
+  if (fromDate && fromDate > today) {
+    showError("Дата 'От' не может быть в будущем");
+    return false;
+  }
+
+  if (toDate && toDate > today) {
+    showError("Дата 'До' не может быть в будущем");
+    return false;
+  }
+
+  if (fromDate && toDate && fromDate > toDate) {
+    showError("Дата 'От' не может быть позже даты 'До'");
+    return false;
+  }
+
   clearError();
   return true;
 }
