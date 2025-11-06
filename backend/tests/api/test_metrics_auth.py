@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Iterator
@@ -15,6 +16,7 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from app.api.dependencies import require_admin_auth
+from app.core.security import TokenPayload
 from app.settings import get_settings
 
 ADMIN_HASH = "a" * 64
@@ -34,14 +36,20 @@ def _configure_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 def test_metrics_dependency_accepts_legacy_hash() -> None:
-    asyncio.run(_run_dependency_check())
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always", DeprecationWarning)
+        payload = asyncio.run(_run_dependency_check())
+
+    assert payload.subject == "admin"
+    assert payload.expires_at > payload.issued_at
+    assert any(item.category is DeprecationWarning for item in captured)
 
 
-async def _run_dependency_check() -> None:
+async def _run_dependency_check() -> TokenPayload:
     app = FastAPI()
 
     @app.get("/ping")
-    def ping(_: str = Depends(require_admin_auth)) -> str:
+    def ping(_: TokenPayload = Depends(require_admin_auth)) -> str:
         return "pong"
 
     route = next(
@@ -78,4 +86,4 @@ async def _run_dependency_check() -> None:
 
     assert not solved.errors
     assert "_" in solved.values
-    assert solved.values["_"].subject == "admin"
+    return solved.values["_"]

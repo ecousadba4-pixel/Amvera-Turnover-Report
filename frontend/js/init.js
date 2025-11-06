@@ -6,6 +6,7 @@ import { fetchRevenueMetrics } from "./revenue.js";
 import { fetchServicesMetrics } from "./services.js";
 import { initializeMonthly } from "./monthly.js";
 import { state } from "./state.js";
+import { bindLoadingIndicator } from "./ui/loadingIndicator.js";
 import { setupHeightAutoResize } from "./resizer.js";
 import { handleAuthFailure, restoreSessionFromStorage } from "./appAuth.js";
 import { showGate } from "./ui/gate.js";
@@ -36,6 +37,7 @@ function initAuthEventHandlers() {
 }
 
 function init() {
+  bindLoadingIndicator();
   initializeMonthly();
   initializeFilters();
   initializeEventHandlers();

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import hmac
-import time
+from functools import lru_cache
 from typing import Annotated, Optional
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 
-from app.core.security import TokenError, TokenPayload, verify_access_token
+from app.core.security import TokenPayload
+from app.services.auth import AdminAuthError, AdminTokenService
 from app.settings import get_settings
 
 AuthHeader = Annotated[
@@ -17,32 +17,54 @@ LegacyHashHeader = Annotated[
 ]
 
 
-def require_admin_auth(
-    authorization: AuthHeader = None, legacy_auth_hash: LegacyHashHeader = None
-) -> TokenPayload:
+@lru_cache
+def _get_admin_token_service() -> AdminTokenService:
     settings = get_settings()
+    return AdminTokenService(
+        secret=settings.auth_token_secret,
+        ttl_seconds=settings.auth_token_ttl_seconds,
+        legacy_hash=settings.admin_password_sha256,
+    )
 
-    if legacy_auth_hash:
-        candidate = legacy_auth_hash.strip().lower()
-        if candidate and hmac.compare_digest(candidate, settings.admin_password_sha256):
-            now = int(time.time())
-            return TokenPayload(subject="admin", issued_at=now, expires_at=0)
 
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
+def _optional_legacy_admin_auth(
+    legacy_auth_hash: LegacyHashHeader = None,
+) -> Optional[TokenPayload]:
+    """Путь совместимости для устаревшего заголовка ``X-Auth-Hash``.
+
+    TODO: удалить после полной миграции на Bearer-токены.
+    """
+
+    if not legacy_auth_hash:
+        return None
+
+    service = _get_admin_token_service()
+    try:
+        return service.verify_legacy_hash(legacy_auth_hash)
+    except AdminAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+
+LegacyToken = Annotated[Optional[TokenPayload], Depends(_optional_legacy_admin_auth)]
+
+
+def require_admin_auth(
+    authorization: AuthHeader = None,
+    legacy_payload: LegacyToken = None,
+) -> TokenPayload:
+    if legacy_payload is not None:
+        return legacy_payload
 
     if not authorization:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header",
+        )
 
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token.strip():
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization scheme")
-
+    service = _get_admin_token_service()
     try:
-        return verify_access_token(token=token.strip(), secret=settings.auth_token_secret)
-    except TokenError as exc:
+        return service.verify_bearer(authorization)
+    except AdminAuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
 

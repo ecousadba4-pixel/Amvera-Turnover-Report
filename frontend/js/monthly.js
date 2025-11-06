@@ -11,7 +11,6 @@ import { elements, monthlyRangeButtons, summaryCards } from "./dom.js";
 import {
   abortSectionController,
   resetMonthlyState,
-  setActiveServiceRow,
   setSectionController,
   state,
 } from "./state.js";
@@ -20,8 +19,13 @@ import { getMonthlyCacheKey, getMonthlyServiceCacheKey, getCachedResponse, setCa
 import { ensureAuthSession, getAuthorizationHeader, hasValidAuthSession } from "./auth/index.js";
 import { requestWithDateFieldFallback } from "./api/dateField.js";
 import { ensureApiBase } from "./api/base.js";
-import { isAuthError, isAbortError } from "./api/errors.js";
+import { buildHttpError, isAuthError, isAbortError } from "./api/errors.js";
 import { scheduleHeightUpdate } from "./resizer.js";
+import {
+  clearActiveServiceRow,
+  getActiveServiceRow,
+  setActiveServiceRowElement,
+} from "./ui/serviceHighlight.js";
 
 export function initializeMonthly() {
   bindSummaryCards();
@@ -31,6 +35,7 @@ export function initializeMonthly() {
 
 export function resetMonthlyDetails() {
   resetMonthlyState();
+  clearActiveServiceRow();
   setActiveMonthlyRangeButton(state.activeMonthlyRange);
   summaryCards.forEach((card) => card.classList.remove("is-active"));
   clearMonthlyRows();
@@ -56,7 +61,7 @@ export function handleServiceNameClick(row, serviceType) {
 
   if (
     state.activeMonthlyContext === MONTHLY_CONTEXT_SERVICE &&
-    state.activeServiceRow === row &&
+    getActiveServiceRow() === row &&
     elements.monthlyCard &&
     !elements.monthlyCard.classList.contains("hidden")
   ) {
@@ -75,7 +80,7 @@ export function handleServiceNameClick(row, serviceType) {
   state.activeMonthlyMetric = null;
   state.activeSummaryCard = null;
   summaryCards.forEach((card) => card.classList.remove("is-active"));
-  setActiveServiceRow(row);
+  setActiveServiceRowElement(row);
 
   state.activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
   setActiveMonthlyRangeButton(state.activeMonthlyRange);
@@ -166,7 +171,7 @@ function handleSummaryCardClick(card, metric) {
   summaryCards.forEach((item) => {
     item.classList.toggle("is-active", item === card);
   });
-  setActiveServiceRow(null);
+  clearActiveServiceRow();
 
   state.activeMonthlyMetric = metric;
   state.activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
@@ -309,15 +314,14 @@ function renderMonthlyService(serviceType, payload) {
   renderMonthlySeries(points, aggregateValue, (value) => fmtRub(value));
 }
 
-async function loadMonthlyMetric(metric, range) {
+async function executeMonthlyRequest({ cacheKey, fetchData, onSuccess, onAuthError, onError }) {
   if (!ensureAuthSession()) {
     return false;
   }
 
-  const cacheKey = getMonthlyCacheKey(metric, range);
   const cached = getCachedResponse(cacheKey);
   if (cached) {
-    renderMonthlyMetrics(metric, cached);
+    onSuccess(cached);
     return true;
   }
 
@@ -327,28 +331,23 @@ async function loadMonthlyMetric(metric, range) {
   setSectionController(SECTION_MONTHLY, controller);
 
   try {
-    const data = await requestWithDateFieldFallback({
-      path: "/api/metrics/monthly",
-      baseParams: { metric, range },
-      includeDateField: true,
-      signal: controller.signal,
-      headers: getAuthorizationHeader(),
-    });
+    const data = await fetchData({ signal: controller.signal });
     setCachedResponse(cacheKey, data);
-    renderMonthlyMetrics(metric, data);
+    onSuccess(data);
     return true;
   } catch (error) {
     if (isAbortError(error)) {
       return false;
     }
     if (isAuthError(error)) {
-      const event = new CustomEvent("monthly:auth-error", { detail: error, bubbles: true });
-      document.dispatchEvent(event);
-      showMonthlyMessage("Для просмотра требуется авторизация");
+      if (typeof onAuthError === "function") {
+        onAuthError(error);
+      }
       return false;
     }
-    console.error("Ошибка загрузки помесячных данных", error);
-    showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+    if (typeof onError === "function") {
+      onError(error);
+    }
     return false;
   } finally {
     if (state.controllers[SECTION_MONTHLY] === controller) {
@@ -357,10 +356,53 @@ async function loadMonthlyMetric(metric, range) {
   }
 }
 
-async function loadMonthlyService(serviceType, range) {
-  if (!ensureAuthSession()) {
-    return false;
+async function fetchMonthlyServiceData({ baseUrl, serviceType, range, signal }) {
+  const params = new URLSearchParams({
+    service_type: serviceType,
+    range,
+  });
+
+  const url = `${baseUrl}/api/services/monthly?${params.toString()}`;
+  const resp = await fetch(url, {
+    headers: getAuthorizationHeader(),
+    signal,
+  });
+
+  if (!resp.ok) {
+    throw await buildHttpError(resp);
   }
+
+  return await resp.json();
+}
+
+function handleMonthlyAuthError(error) {
+  const event = new CustomEvent("monthly:auth-error", { detail: error, bubbles: true });
+  document.dispatchEvent(event);
+  showMonthlyMessage("Для просмотра требуется авторизация");
+}
+
+async function loadMonthlyMetric(metric, range) {
+  const cacheKey = getMonthlyCacheKey(metric, range);
+  return executeMonthlyRequest({
+    cacheKey,
+    fetchData: ({ signal }) =>
+      requestWithDateFieldFallback({
+        path: "/api/metrics/monthly",
+        baseParams: { metric, range },
+        includeDateField: true,
+        signal,
+        headers: getAuthorizationHeader(),
+      }),
+    onSuccess: (data) => renderMonthlyMetrics(metric, data),
+    onAuthError: handleMonthlyAuthError,
+    onError: (error) => {
+      console.error("Ошибка загрузки помесячных данных", error);
+      showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+    },
+  });
+}
+
+async function loadMonthlyService(serviceType, range) {
   const baseUrl = ensureApiBase();
   if (!baseUrl) {
     return false;
@@ -372,59 +414,20 @@ async function loadMonthlyService(serviceType, range) {
   }
 
   const cacheKey = getMonthlyServiceCacheKey(normalizedService, range);
-  const cached = getCachedResponse(cacheKey);
-  if (cached) {
-    renderMonthlyService(normalizedService, cached);
-    return true;
-  }
-
-  abortSectionController(SECTION_MONTHLY);
-
-  const controller = new AbortController();
-  setSectionController(SECTION_MONTHLY, controller);
-
-  const params = new URLSearchParams({
-    service_type: normalizedService,
-    range,
+  return executeMonthlyRequest({
+    cacheKey,
+    fetchData: ({ signal }) =>
+      fetchMonthlyServiceData({
+        baseUrl,
+        serviceType: normalizedService,
+        range,
+        signal,
+      }),
+    onSuccess: (data) => renderMonthlyService(normalizedService, data),
+    onAuthError: handleMonthlyAuthError,
+    onError: (error) => {
+      console.error("Ошибка загрузки помесячных данных по услугам", error);
+      showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
+    },
   });
-
-  const url = `${baseUrl}/api/services/monthly?${params.toString()}`;
-
-  try {
-    const resp = await fetch(url, {
-      headers: getAuthorizationHeader(),
-      signal: controller.signal,
-    });
-
-    if (resp.status === 401 || resp.status === 403) {
-      const error = await resp.json().catch(() => ({}));
-      const authError = new Error("Неверный токен или сессия истекла.");
-      authError.status = resp.status;
-      authError.detail = error;
-      const event = new CustomEvent("monthly:auth-error", { detail: authError, bubbles: true });
-      document.dispatchEvent(event);
-      showMonthlyMessage("Для просмотра требуется авторизация");
-      return false;
-    }
-
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    setCachedResponse(cacheKey, data);
-    renderMonthlyService(normalizedService, data);
-    return true;
-  } catch (error) {
-    if (isAbortError(error)) {
-      return false;
-    }
-    console.error("Ошибка загрузки помесячных данных по услугам", error);
-    showMonthlyMessage(`Ошибка загрузки данных: ${error.message}`);
-    return false;
-  } finally {
-    if (state.controllers[SECTION_MONTHLY] === controller) {
-      setSectionController(SECTION_MONTHLY, null);
-    }
-  }
 }

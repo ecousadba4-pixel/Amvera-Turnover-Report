@@ -25,14 +25,34 @@ export const state = {
   activeMonthlyRange: MONTHLY_RANGE_DEFAULT,
   activeMonthlyContext: null,
   activeMonthlyService: null,
-  activeServiceRow: null,
   lastTriggeredRange: { from: null, to: null },
 };
+
+const loadingSubscribers = new Set();
 
 export const monthlyStateKeys = {
   metricContext: MONTHLY_CONTEXT_METRIC,
   serviceContext: MONTHLY_CONTEXT_SERVICE,
 };
+
+export function subscribeToLoadingChanges(listener) {
+  if (typeof listener === "function") {
+    loadingSubscribers.add(listener);
+  }
+  return () => {
+    loadingSubscribers.delete(listener);
+  };
+}
+
+function notifyLoadingSubscribers(isActive) {
+  loadingSubscribers.forEach((listener) => {
+    try {
+      listener(isActive);
+    } catch (error) {
+      console.error("Ошибка подписчика загрузки", error);
+    }
+  });
+}
 
 export function setAuthSession(session) {
   state.authSession = session ? { ...session } : null;
@@ -77,38 +97,28 @@ export function getSectionController(section) {
 }
 
 export function setSectionController(section, controller) {
-  state.controllers[section] = controller;
+  state.controllers[section] = controller || null;
 }
 
 export function abortSectionController(section) {
   const controller = getSectionController(section);
-  if (controller) {
-    setSectionController(section, null);
-    setLoadingState(false);
-    controller.abort();
+  if (!controller) {
+    return;
   }
+  setSectionController(section, null);
+  setLoadingState(false);
+  controller.abort();
 }
 
 export function setLoadingState(isLoading) {
   if (isLoading) {
     state.loadingCounter += 1;
-    document.body.classList.add("is-loading");
   } else {
     state.loadingCounter = Math.max(0, state.loadingCounter - 1);
-    if (state.loadingCounter === 0) {
-      document.body.classList.remove("is-loading");
-    }
   }
-}
-
-export function setActiveServiceRow(row) {
-  if (state.activeServiceRow && state.activeServiceRow !== row) {
-    state.activeServiceRow.classList.remove("is-active");
-  }
-  state.activeServiceRow = row || null;
-  if (state.activeServiceRow) {
-    state.activeServiceRow.classList.add("is-active");
-  }
+  const isActive = state.loadingCounter > 0;
+  notifyLoadingSubscribers(isActive);
+  return isActive;
 }
 
 export function resetMonthlyState() {
@@ -117,5 +127,4 @@ export function resetMonthlyState() {
   state.activeMonthlyService = null;
   state.activeMonthlyContext = null;
   state.activeMonthlyRange = MONTHLY_RANGE_DEFAULT;
-  setActiveServiceRow(null);
 }
