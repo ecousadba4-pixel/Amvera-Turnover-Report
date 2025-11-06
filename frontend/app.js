@@ -72,7 +72,9 @@ const monthlyRangeButtons = $$('[data-monthly-range]');
 const presetButtons = [btnCurMonth, btnPrevMonth];
 
 const STORAGE_KEY = "u4sRevenueAuthSession";
-const TOKEN_STORAGE_VERSION = 1;
+const TOKEN_STORAGE_VERSION = 2;
+const TOKEN_TYPE_TOKEN = "token";
+const TOKEN_TYPE_HASH = "hash";
 const FETCH_DEBOUNCE_DELAY = 600;
 
 const MONTHLY_RANGE_THIS_YEAR = "this_year";
@@ -187,6 +189,31 @@ function canUseSessionStorage() {
   }
 }
 
+function isLikelyNetworkError(error) {
+  if (!error) {
+    return false;
+  }
+  if (error.name === "TypeError") {
+    return true;
+  }
+  const message = String(error.message || "").toLowerCase();
+  return message.includes("failed to fetch") || message.includes("networkerror");
+}
+
+async function sha256Hex(value) {
+  if (!value) {
+    return "";
+  }
+  if (!globalThis.crypto || !globalThis.crypto.subtle) {
+    throw new Error("Хеширование недоступно в этом браузере");
+  }
+  const encoder = new TextEncoder();
+  const data = encoder.encode(value);
+  const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function readStoredSession() {
   if (!canUseSessionStorage()) {
     return null;
@@ -197,21 +224,50 @@ function readStoredSession() {
       return null;
     }
     const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== TOKEN_STORAGE_VERSION) {
+    if (!parsed || typeof parsed !== "object") {
       return null;
     }
-    const token = typeof parsed.token === "string" ? parsed.token.trim() : "";
-    const expiresAt = Number(parsed.expiresAt || 0);
-    if (!token) {
-      return null;
+
+    const version = Number(parsed.version || 0);
+
+    const normalizeTokenSession = (token, expiresAt = 0) => {
+      const trimmedToken = typeof token === "string" ? token.trim() : "";
+      if (!trimmedToken) {
+        return null;
+      }
+      const normalizedExpiresAt = Number(expiresAt || 0);
+      if (normalizedExpiresAt && Date.now() >= normalizedExpiresAt) {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return {
+        type: TOKEN_TYPE_TOKEN,
+        token: trimmedToken,
+        expiresAt: normalizedExpiresAt,
+      };
+    };
+
+    if (version === 1) {
+      return normalizeTokenSession(parsed.token, parsed.expiresAt);
     }
-    if (expiresAt && Date.now() >= expiresAt) {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-      return null;
+
+    if (version === TOKEN_STORAGE_VERSION) {
+      const type = parsed.type === TOKEN_TYPE_HASH ? TOKEN_TYPE_HASH : TOKEN_TYPE_TOKEN;
+      if (type === TOKEN_TYPE_HASH) {
+        const hash = typeof parsed.hash === "string" ? parsed.hash.trim().toLowerCase() : "";
+        if (!hash) {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+          return null;
+        }
+        return { type: TOKEN_TYPE_HASH, hash };
+      }
+      return normalizeTokenSession(parsed.token, parsed.expiresAt);
     }
-    return { token, expiresAt };
+
+    window.sessionStorage.removeItem(STORAGE_KEY);
+    return null;
   } catch (e) {
-    console.warn("Не удалось прочитать сохранённый токен из sessionStorage", e);
+    console.warn("Не удалось прочитать сохранённую сессию из sessionStorage", e);
     try {
       window.sessionStorage.removeItem(STORAGE_KEY);
     } catch (_) {
@@ -226,56 +282,122 @@ function persistSession(session) {
     return;
   }
   try {
-    if (!session || !session.token) {
+    if (!session) {
       window.sessionStorage.removeItem(STORAGE_KEY);
       return;
     }
-    const payload = {
-      version: TOKEN_STORAGE_VERSION,
-      token: session.token,
-      expiresAt: session.expiresAt || 0,
-    };
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+    if (session.type === TOKEN_TYPE_HASH) {
+      const hash = typeof session.hash === "string" ? session.hash.trim().toLowerCase() : "";
+      if (!hash) {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      const payload = {
+        version: TOKEN_STORAGE_VERSION,
+        type: TOKEN_TYPE_HASH,
+        hash,
+      };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      return;
+    }
+
+    if (session.type === TOKEN_TYPE_TOKEN) {
+      const token = typeof session.token === "string" ? session.token.trim() : "";
+      if (!token) {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      const payload = {
+        version: TOKEN_STORAGE_VERSION,
+        type: TOKEN_TYPE_TOKEN,
+        token,
+        expiresAt: Number(session.expiresAt || 0),
+      };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      return;
+    }
+
+    window.sessionStorage.removeItem(STORAGE_KEY);
   } catch (e) {
-    console.warn("Не удалось сохранить токен в sessionStorage", e);
+    console.warn("Не удалось сохранить сессию в sessionStorage", e);
   }
 }
 
-function setAuthSession(token, expiresAt) {
-  authToken = token || null;
-  authTokenExpiresAt = expiresAt || 0;
+function setAuthSession(session) {
+  if (!session) {
+    authSession = null;
+    return;
+  }
+
+  if (session.type === TOKEN_TYPE_HASH) {
+    const hash = typeof session.hash === "string" ? session.hash.trim().toLowerCase() : "";
+    authSession = hash ? { type: TOKEN_TYPE_HASH, hash } : null;
+    return;
+  }
+
+  if (session.type === TOKEN_TYPE_TOKEN) {
+    const token = typeof session.token === "string" ? session.token.trim() : "";
+    if (!token) {
+      authSession = null;
+      return;
+    }
+    authSession = {
+      type: TOKEN_TYPE_TOKEN,
+      token,
+      expiresAt: Number(session.expiresAt || 0),
+    };
+    return;
+  }
+
+  authSession = null;
 }
 
 function clearAuthSession() {
-  setAuthSession(null, 0);
+  authSession = null;
 }
 
 function hasValidAuthSession() {
-  if (!authToken) {
+  if (!authSession) {
     return false;
   }
-  if (authTokenExpiresAt && Date.now() >= authTokenExpiresAt) {
-    return false;
+  if (authSession.type === TOKEN_TYPE_HASH) {
+    return Boolean(authSession.hash);
   }
-  return true;
+  if (authSession.type === TOKEN_TYPE_TOKEN) {
+    if (!authSession.token) {
+      return false;
+    }
+    if (authSession.expiresAt && Date.now() >= authSession.expiresAt) {
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 function ensureAuthSession() {
-  if (!authToken) {
+  if (!authSession) {
     return false;
   }
-  if (authTokenExpiresAt && Date.now() >= authTokenExpiresAt) {
+  if (authSession.type === TOKEN_TYPE_HASH) {
+    return Boolean(authSession.hash);
+  }
+  if (authSession.expiresAt && Date.now() >= authSession.expiresAt) {
     handleAuthFailure("Сессия истекла. Авторизуйтесь повторно.");
     return false;
   }
-  return true;
+  return Boolean(authSession.token);
 }
 
 function getAuthorizationHeader() {
   if (!hasValidAuthSession()) {
     return {};
   }
-  return { Authorization: `Bearer ${authToken}` };
+  if (authSession.type === TOKEN_TYPE_HASH) {
+    return { "X-Auth-Hash": authSession.hash };
+  }
+  return { Authorization: `Bearer ${authSession.token}` };
 }
 
 function showError(message) {
@@ -298,8 +420,7 @@ const fmtPct = (v, fractionDigits = 1) =>
 const fmtNumber = (v, fractionDigits = 0) =>
   getNumberFormatter(fractionDigits).format(v);
 
-let authToken = null;
-let authTokenExpiresAt = 0;
+let authSession = null;
 let revenueFetchTimer = null;
 let servicesFetchTimer = null;
 const controllers = {
@@ -1100,7 +1221,7 @@ async function loadMetrics({
     });
 
     if (resp.status === 401 || resp.status === 403) {
-      handleAuthFailure("Неверный токен или сессия истекла.");
+      handleAuthFailure("Неверный пароль или сессия истекла.");
       if (typeof onAuthError === "function") {
         onAuthError();
       }
@@ -1318,28 +1439,43 @@ async function authenticate(password) {
     throw new Error("Базовый URL API не сконфигурирован");
   }
 
-  const resp = await fetch(`${API_BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
+  try {
+    const resp = await fetch(`${API_BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
 
-  if (resp.status === 401 || resp.status === 403) {
-    throw new Error("Неверный пароль");
-  }
+    if (resp.status === 401 || resp.status === 403) {
+      throw new Error("Неверный пароль");
+    }
 
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`);
-  }
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
 
-  const data = await resp.json();
-  const token = typeof data.access_token === "string" ? data.access_token.trim() : "";
-  if (!token) {
-    throw new Error("Токен авторизации не получен");
+    const data = await resp.json();
+    const token = typeof data.access_token === "string" ? data.access_token.trim() : "";
+    if (!token) {
+      throw new Error("Токен авторизации не получен");
+    }
+    const expiresInSeconds = Number(data.expires_in || 0);
+    const expiresAt = expiresInSeconds > 0 ? Date.now() + expiresInSeconds * 1000 : 0;
+    return { type: TOKEN_TYPE_TOKEN, token, expiresAt };
+  } catch (error) {
+    if (isLikelyNetworkError(error)) {
+      try {
+        const hash = await sha256Hex(password);
+        if (!hash) {
+          throw new Error("empty hash");
+        }
+        return { type: TOKEN_TYPE_HASH, hash };
+      } catch (hashError) {
+        console.error("Не удалось вычислить SHA-256 пароля", hashError);
+      }
+    }
+    throw error;
   }
-  const expiresInSeconds = Number(data.expires_in || 0);
-  const expiresAt = expiresInSeconds > 0 ? Date.now() + expiresInSeconds * 1000 : 0;
-  return { token, expiresAt };
 }
 
 function bindPasswordForm() {
@@ -1356,7 +1492,7 @@ function bindPasswordForm() {
 
     try {
       const session = await authenticate(pwd);
-      setAuthSession(session.token, session.expiresAt);
+      setAuthSession(session);
       persistSession(session);
       requestCache.clear();
       resetMonthlyDetails();
@@ -1411,7 +1547,7 @@ function applyInitialSectionState() {
 function restoreSessionFromStorage() {
   const stored = readStoredSession();
   if (stored) {
-    setAuthSession(stored.token, stored.expiresAt);
+    setAuthSession(stored);
     requestCache.clear();
     hideGate();
     fetchRevenueMetrics();
