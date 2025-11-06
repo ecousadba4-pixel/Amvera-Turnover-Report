@@ -217,16 +217,19 @@ h2 {
 
 /* === ПРЕСЕТЫ === */
 .presetbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.65rem;
   margin-bottom: 1.25rem;
+  width: 100%;
 }
 
 .preset-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  min-width: 0;
   padding: 0.6rem 1.1rem;
   border-radius: 16px;
   border: 1px solid var(--border-soft);
@@ -831,6 +834,10 @@ body.is-loading .summary-value::after {
   .form-select {
     padding: 0.7rem 0.85rem;
     font-size: 0.95rem;
+  }
+
+  #dateInputs .form-input[type='date'] {
+    padding: 0.55rem 0.85rem;
   }
 
   .help-text {
