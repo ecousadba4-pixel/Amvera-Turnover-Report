@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Annotated, Optional
+from typing import Annotated, AsyncIterator, Optional
 
 from fastapi import Depends, Header, HTTPException, status
 
 from app.core.security import TokenPayload
 from app.services.auth import AdminAuthError, AdminTokenService
 from app.settings import Settings, get_settings
+from app.db import use_database
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -17,6 +18,14 @@ def get_database_dsn(settings: SettingsDep) -> str:
 
 
 DatabaseDsn = Annotated[str, Depends(get_database_dsn)]
+
+
+async def _use_database(dsn: DatabaseDsn) -> AsyncIterator[None]:
+    async with use_database(dsn):
+        yield
+
+
+DatabaseSession = Annotated[None, Depends(_use_database)]
 
 AuthHeader = Annotated[
     Optional[str], Header(alias="Authorization", convert_underscores=False)
@@ -81,6 +90,7 @@ __all__ = [
     "SettingsDep",
     "get_database_dsn",
     "DatabaseDsn",
+    "DatabaseSession",
     "AuthHeader",
     "require_admin_auth",
 ]
