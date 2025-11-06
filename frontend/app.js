@@ -2,6 +2,10 @@
 const DEFAULT_API_BASE = "https://u4s-turnover-karinausadba.amvera.io";
 const DATE_FIELD_CREATED = "created";
 const DATE_FIELD_CHECKIN = "checkin";
+const DATE_FIELD_ALIASES = {
+  [DATE_FIELD_CREATED]: [DATE_FIELD_CREATED, "created_at"],
+  [DATE_FIELD_CHECKIN]: [DATE_FIELD_CHECKIN, "checkin_date"],
+};
 const SECTION_REVENUE = "revenue";
 const SECTION_SERVICES = "services";
 const SECTION_MONTHLY = "monthly";
@@ -88,6 +92,7 @@ const MONTHLY_CONTEXT_SERVICE = "service";
 const requestCache = new Map();
 const REQUEST_CACHE_TTL_MS = 5 * 60 * 1000;
 const REQUEST_CACHE_MAX_ENTRIES = 50;
+const resolvedDateFieldOverrides = new Map();
 
 const RUB_FORMATTER = new Intl.NumberFormat("ru-RU", {
   style: "currency",
@@ -173,6 +178,224 @@ function pruneCacheSize() {
     const keyToDelete = sortedKeys.shift();
     requestCache.delete(keyToDelete);
   }
+}
+
+function getDateFieldCandidates(field) {
+  const aliases = DATE_FIELD_ALIASES[field] || [];
+  const values = [field, ...aliases];
+  const unique = [];
+  for (const value of values) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (!normalized) {
+      continue;
+    }
+    if (!unique.includes(normalized)) {
+      unique.push(normalized);
+    }
+  }
+  return unique.length ? unique : [field].filter(Boolean);
+}
+
+function getOrderedDateFieldCandidates(field) {
+  const override = resolvedDateFieldOverrides.get(field);
+  const candidates = getDateFieldCandidates(field);
+  if (!override || !candidates.includes(override)) {
+    return candidates;
+  }
+  return [override, ...candidates.filter((candidate) => candidate !== override)];
+}
+
+function rememberDateFieldOverride(field, candidate) {
+  if (!candidate || candidate === field) {
+    resolvedDateFieldOverrides.delete(field);
+    return;
+  }
+  resolvedDateFieldOverrides.set(field, candidate);
+}
+
+function cloneSearchParams(baseParams) {
+  if (!baseParams) {
+    return new URLSearchParams();
+  }
+  if (baseParams instanceof URLSearchParams) {
+    return new URLSearchParams(baseParams);
+  }
+  const params = new URLSearchParams();
+  Object.entries(baseParams).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const strValue = String(value);
+    if (!strValue) {
+      return;
+    }
+    params.set(key, strValue);
+  });
+  return params;
+}
+
+async function readResponseError(resp) {
+  let text = "";
+  try {
+    text = await resp.text();
+  } catch (err) {
+    return { detail: null, message: `HTTP ${resp.status}` };
+  }
+
+  if (!text) {
+    return { detail: null, message: `HTTP ${resp.status}` };
+  }
+
+  try {
+    const payload = JSON.parse(text);
+    const detail = payload?.detail ?? null;
+    if (typeof detail === "string" && detail.trim()) {
+      return { detail, message: detail };
+    }
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => {
+          if (item && typeof item === "object") {
+            if (typeof item.msg === "string" && item.msg.trim()) {
+              return item.msg.trim();
+            }
+            if (typeof item.detail === "string" && item.detail.trim()) {
+              return item.detail.trim();
+            }
+          }
+          return null;
+        })
+        .filter(Boolean);
+      if (messages.length) {
+        return { detail, message: messages.join("; ") };
+      }
+    }
+    if (detail && typeof detail === "object") {
+      const values = Object.values(detail)
+        .map((value) => (typeof value === "string" ? value.trim() : null))
+        .filter(Boolean);
+      if (values.length) {
+        return { detail, message: values.join("; ") };
+      }
+    }
+    return { detail, message: `HTTP ${resp.status}` };
+  } catch (err) {
+    return { detail: text, message: text };
+  }
+}
+
+async function buildHttpError(resp) {
+  const { detail, message } = await readResponseError(resp);
+  const statusMessage = `HTTP ${resp.status}`;
+  const errorMessage = message && message !== statusMessage ? `${message} (${statusMessage})` : statusMessage;
+  const error = new Error(errorMessage);
+  error.status = resp.status;
+  error.detail = detail;
+  error.url = resp.url;
+  return error;
+}
+
+function isDateFieldValidationError(error) {
+  if (!error || error.status !== 422) {
+    return false;
+  }
+  const detail = error.detail;
+  if (typeof detail === "string") {
+    return detail.toLowerCase().includes("date_field");
+  }
+  if (Array.isArray(detail)) {
+    return detail.some((item) => {
+      if (!item || typeof item !== "object") {
+        return false;
+      }
+      if (Array.isArray(item.loc) && item.loc.includes("date_field")) {
+        return true;
+      }
+      if (typeof item.msg === "string" && item.msg.toLowerCase().includes("date_field")) {
+        return true;
+      }
+      return false;
+    });
+  }
+  if (detail && typeof detail === "object") {
+    if (Object.prototype.hasOwnProperty.call(detail, "date_field")) {
+      return true;
+    }
+    return Object.values(detail).some((value) => {
+      if (typeof value === "string") {
+        return value.toLowerCase().includes("date_field");
+      }
+      return false;
+    });
+  }
+  return false;
+}
+
+function isAuthError(error) {
+  return Boolean(error && (error.status === 401 || error.status === 403));
+}
+
+async function requestWithDateFieldFallback({
+  path,
+  baseParams,
+  includeDateField = true,
+  signal,
+  headers,
+}) {
+  if (!includeDateField) {
+    const params = cloneSearchParams(baseParams);
+    const queryString = params.toString();
+    const url = `${API_BASE}${path}${queryString ? `?${queryString}` : ""}`;
+    const resp = await fetch(url, { headers, signal });
+    if (!resp.ok) {
+      throw await buildHttpError(resp);
+    }
+    return await resp.json();
+  }
+
+  const dateField = DATE_FIELD;
+  const candidates = getOrderedDateFieldCandidates(dateField);
+  let lastError = null;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index];
+    const params = cloneSearchParams(baseParams);
+    if (candidate) {
+      params.set("date_field", candidate);
+    }
+    const queryString = params.toString();
+    const url = `${API_BASE}${path}${queryString ? `?${queryString}` : ""}`;
+
+    let resp;
+    try {
+      resp = await fetch(url, { headers, signal });
+    } catch (error) {
+      throw error;
+    }
+
+    if (resp.status === 401 || resp.status === 403) {
+      throw await buildHttpError(resp);
+    }
+
+    if (!resp.ok) {
+      const error = await buildHttpError(resp);
+      const hasNextCandidate = index < candidates.length - 1;
+      if (hasNextCandidate && isDateFieldValidationError(error)) {
+        lastError = error;
+        console.warn(
+          `Сервер отклонил параметр date_field="${candidate}" (${error.message}). Пробуем альтернативное значение.`,
+        );
+        continue;
+      }
+      throw error;
+    }
+
+    const data = await resp.json();
+    rememberDateFieldOverride(dateField, candidate);
+    return data;
+  }
+
+  throw lastError || new Error("Не удалось выполнить запрос");
 }
 
 function setCachedResponse(key, data) {
@@ -747,36 +970,24 @@ async function loadMonthlyMetric(metric, range) {
   const controller = new AbortController();
   setSectionController(SECTION_MONTHLY, controller);
 
-  const params = new URLSearchParams({
-    metric,
-    range,
-    date_field: DATE_FIELD,
-  });
-
-  const url = `${API_BASE}/api/metrics/monthly?${params.toString()}`;
-
   try {
-    const resp = await fetch(url, {
-      headers: getAuthorizationHeader(),
+    const data = await requestWithDateFieldFallback({
+      path: "/api/metrics/monthly",
+      baseParams: { metric, range },
+      includeDateField: true,
       signal: controller.signal,
+      headers: getAuthorizationHeader(),
     });
-
-    if (resp.status === 401 || resp.status === 403) {
-      handleAuthFailure("Неверный токен или сессия истекла.");
-      showMonthlyMessage("Для просмотра требуется авторизация");
-      return false;
-    }
-
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = await resp.json();
     setCachedResponse(cacheKey, data);
     renderMonthlyMetrics(metric, data);
     return true;
   } catch (e) {
     if (isAbortError(e)) {
+      return false;
+    }
+    if (isAuthError(e)) {
+      handleAuthFailure("Неверный токен или сессия истекла.");
+      showMonthlyMessage("Для просмотра требуется авторизация");
       return false;
     }
     console.error("Ошибка загрузки помесячных данных", e);
@@ -1201,38 +1412,22 @@ async function loadMetrics({
   setSectionController(section, controller);
   setLoadingState(true);
 
-  const params = new URLSearchParams();
-  if (fromValue) {
-    params.set("date_from", fromValue);
-  }
-  if (toValue) {
-    params.set("date_to", toValue);
-  }
-  if (includeDateField) {
-    params.set("date_field", DATE_FIELD);
-  }
-
-  const url = `${API_BASE}/api/${endpoint}?${params.toString()}`;
-
   try {
-    const resp = await fetch(url, {
-      headers: getAuthorizationHeader(),
+    const baseParams = new URLSearchParams();
+    if (fromValue) {
+      baseParams.set("date_from", fromValue);
+    }
+    if (toValue) {
+      baseParams.set("date_to", toValue);
+    }
+
+    const data = await requestWithDateFieldFallback({
+      path: `/api/${endpoint}`,
+      baseParams,
+      includeDateField,
       signal: controller.signal,
+      headers: getAuthorizationHeader(),
     });
-
-    if (resp.status === 401 || resp.status === 403) {
-      handleAuthFailure("Неверный пароль или сессия истекла.");
-      if (typeof onAuthError === "function") {
-        onAuthError();
-      }
-      return false;
-    }
-
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
-
-    const data = await resp.json();
     onApply(data);
     setCachedResponse(cacheKey, data);
     if (typeof onSuccess === "function") {
@@ -1241,6 +1436,13 @@ async function loadMetrics({
     return true;
   } catch (e) {
     if (isAbortError(e)) {
+      return false;
+    }
+    if (isAuthError(e)) {
+      handleAuthFailure("Неверный пароль или сессия истекла.");
+      if (typeof onAuthError === "function") {
+        onAuthError();
+      }
       return false;
     }
     if (typeof onError === "function") {
