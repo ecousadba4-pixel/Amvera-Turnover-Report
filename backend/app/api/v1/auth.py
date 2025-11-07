@@ -12,7 +12,8 @@ from app.core.security import create_access_token
 
 
 class LoginRequest(BaseModel):
-    password: str
+    password: str | None = None
+    login: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
 async def login(request: Request, payload: LoginRequest, settings: SettingsDep) -> LoginResponse:
-    password = (payload.password or "").strip()
+    password = (payload.password or payload.login or "").strip()
     if not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required"
