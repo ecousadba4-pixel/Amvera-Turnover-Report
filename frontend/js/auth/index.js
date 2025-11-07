@@ -62,20 +62,48 @@ export function updateAuthSession(session) {
 export async function authenticate(password) {
   const baseUrl = requireApiBase();
 
-  const resp = await fetch(`${baseUrl}/api/auth/login`, {
+  const requestUrl = `${baseUrl}/api/auth/login`;
+  const fallbackHeaders = { "Content-Type": "application/x-www-form-urlencoded" };
+  const fallbackBody = new URLSearchParams({ password }).toString();
+
+  const attemptRequest = async (init) => {
+    const resp = await fetch(requestUrl, init);
+
+    if (resp.status === 401 || resp.status === 403) {
+      throw new Error("Неверный пароль");
+    }
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    return resp;
+  };
+
+  const jsonRequest = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
+  };
+
+  try {
+    const resp = await attemptRequest(jsonRequest);
+    return await parseAuthResponse(resp);
+  } catch (error) {
+    if (!(error instanceof Error) || !/HTTP 422/.test(error.message)) {
+      throw error;
+    }
+  }
+
+  const resp = await attemptRequest({
+    method: "POST",
+    headers: fallbackHeaders,
+    body: fallbackBody,
   });
+  return await parseAuthResponse(resp);
+}
 
-  if (resp.status === 401 || resp.status === 403) {
-    throw new Error("Неверный пароль");
-  }
-
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`);
-  }
-
+async function parseAuthResponse(resp) {
   const data = await resp.json();
   const token = typeof data.access_token === "string" ? data.access_token.trim() : "";
   if (!token) {
