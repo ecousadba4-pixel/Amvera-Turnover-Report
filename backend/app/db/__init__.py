@@ -4,7 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from types import MappingProxyType
-from typing import AsyncIterator, Awaitable, Callable, Mapping, Optional, TypeVar, cast
+from typing import Any, AsyncIterator, Awaitable, Callable, Mapping, Optional, TypeVar, cast
 
 import psycopg
 from psycopg.rows import dict_row
@@ -15,6 +15,7 @@ __all__ = [
     "fetchall",
     "close_all_pools",
     "use_database",
+    "check_pool_ready",
 ]
 
 _pool_lock = asyncio.Lock()
@@ -108,8 +109,8 @@ async def _run_with_retry(
             await _reset_pool(resolved_dsn)
 
 
-RowMapping = Mapping[str, object]
-_EMPTY_PARAMS: Mapping[str, object] = MappingProxyType({})
+RowMapping = Mapping[str, Any]
+_EMPTY_PARAMS: Mapping[str, Any] = MappingProxyType({})
 
 
 async def fetchone(
@@ -156,3 +157,16 @@ async def close_all_pools() -> None:
         _pools.clear()
     for _, pool in pools:
         await pool.close()
+
+
+async def check_pool_ready(dsn: str) -> tuple[bool, str | None]:
+    """Ensure that a connection pool can be acquired and is healthy."""
+    try:
+        pool = await _get_or_create_pool(dsn)
+        await pool.check()
+        return True, None
+    except psycopg.Error as exc:  # pragma: no cover - defensive path
+        await _reset_pool(dsn)
+        return False, str(exc)
+    except Exception as exc:  # pragma: no cover - defensive path
+        return False, str(exc)

@@ -1,9 +1,11 @@
 import {
   FETCH_DEBOUNCE_DELAY,
+  SECTION_REVENUE,
   SECTION_SERVICES,
 } from "./config.js";
 import { elements, presetButtons, rangeInputs } from "./dom.js";
 import {
+  abortSectionController,
   cancelRevenueFetch,
   cancelServicesFetch,
   scheduleRevenueFetch,
@@ -32,6 +34,8 @@ export function bindFilterControls({ onFetchRevenue, onFetchServices }) {
     state.servicesDirty = true;
     state.lastTriggeredRange.from = null;
     state.lastTriggeredRange.to = null;
+    abortSectionController(SECTION_REVENUE);
+    abortSectionController(SECTION_SERVICES);
     if (!validateCurrentRange()) {
       cancelRevenueFetch();
       cancelServicesFetch();
@@ -71,9 +75,11 @@ export function bindFilterControls({ onFetchRevenue, onFetchServices }) {
     state.lastTriggeredRange.to = currentTo;
 
     state.servicesDirty = true;
+    abortSectionController(SECTION_REVENUE);
     cancelRevenueFetch();
     onFetchRevenue();
     if (state.activeSection === SECTION_SERVICES) {
+      abortSectionController(SECTION_SERVICES);
       cancelServicesFetch();
       onFetchServices();
     }

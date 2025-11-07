@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.api.dependencies import SettingsDep
+from app.core.limiter import limiter
 from app.core.security import create_access_token
 
 
@@ -24,7 +25,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(payload: LoginRequest, settings: SettingsDep) -> LoginResponse:
+@limiter.limit("5/minute")
+async def login(request: Request, payload: LoginRequest, settings: SettingsDep) -> LoginResponse:
     password = (payload.password or "").strip()
     if not password:
         raise HTTPException(

@@ -16,7 +16,7 @@ export const DATE_FIELD = DATE_FIELD_CREATED; // DATE_FIELD_CREATED | DATE_FIELD
 export const STORAGE_KEY = "u4sRevenueAuthSession";
 export const TOKEN_STORAGE_VERSION = 2;
 export const TOKEN_TYPE_TOKEN = "token";
-export const FETCH_DEBOUNCE_DELAY = 600;
+export const FETCH_DEBOUNCE_DELAY = 400;
 
 export const MONTHLY_RANGE_THIS_YEAR = "this_year";
 export const MONTHLY_RANGE_LAST_12 = "last_12_months";

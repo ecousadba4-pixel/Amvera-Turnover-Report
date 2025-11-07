@@ -1,5 +1,6 @@
 import { DATE_FIELD, REQUEST_CACHE_MAX_ENTRIES, REQUEST_CACHE_TTL_MS } from "./config.js";
 
+/** @type {Map<string, { data: unknown, expiresAt: number }>} */
 const requestCache = new Map();
 
 export function getCachedResponse(key) {
@@ -11,30 +12,45 @@ export function getCachedResponse(key) {
     requestCache.delete(key);
     return null;
   }
+  promoteEntry(key, entry);
   return entry.data;
 }
 
 export function setCachedResponse(key, data) {
   const expiresAt = Date.now() + REQUEST_CACHE_TTL_MS;
-  requestCache.set(key, { data, expiresAt });
-  pruneCacheSize();
+  const entry = { data, expiresAt };
+  promoteEntry(key, entry);
+  removeExpiredEntries();
+  enforceCacheLimit();
 }
 
 export function clearCache() {
   requestCache.clear();
 }
 
-function pruneCacheSize() {
-  if (requestCache.size <= REQUEST_CACHE_MAX_ENTRIES) {
-    return;
+function promoteEntry(key, entry) {
+  if (requestCache.has(key)) {
+    requestCache.delete(key);
   }
-  const sortedKeys = Array.from(requestCache.entries())
-    .sort((a, b) => a[1].expiresAt - b[1].expiresAt)
-    .map(([key]) => key);
+  requestCache.set(key, entry);
+}
 
-  while (requestCache.size > REQUEST_CACHE_MAX_ENTRIES && sortedKeys.length) {
-    const keyToDelete = sortedKeys.shift();
-    requestCache.delete(keyToDelete);
+function removeExpiredEntries() {
+  const now = Date.now();
+  for (const [key, entry] of requestCache.entries()) {
+    if (entry.expiresAt < now) {
+      requestCache.delete(key);
+    }
+  }
+}
+
+function enforceCacheLimit() {
+  while (requestCache.size > REQUEST_CACHE_MAX_ENTRIES) {
+    const oldestKey = requestCache.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    requestCache.delete(oldestKey);
   }
 }
 

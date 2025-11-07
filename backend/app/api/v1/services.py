@@ -21,7 +21,7 @@ async def services(
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=1000),
+    page_size: int = Query(50, ge=1, le=200),
 ) -> ServicesResponse:
     return await get_services(
         date_from=date_from,
