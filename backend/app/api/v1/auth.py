@@ -8,7 +8,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from app.api.dependencies import SettingsDep
+from app.settings import get_settings
 from app.core.limiter import limiter
 from app.core.security import create_access_token
 
@@ -106,7 +106,8 @@ async def _extract_password(request: Request) -> str:
 
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
-async def login(request: Request, settings: SettingsDep) -> LoginResponse:
+async def login(request: Request) -> LoginResponse:
+    settings = get_settings()
     password = await _extract_password(request)
 
     if not password:
