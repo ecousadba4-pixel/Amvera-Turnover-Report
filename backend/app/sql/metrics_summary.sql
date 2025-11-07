@@ -24,6 +24,6 @@ SELECT
   COALESCE(SUM(CASE WHEN loyalty_level IN ('2 СЕЗОНА','3 СЕЗОНА','4 СЕЗОНА') THEN 1 ELSE 0 END), 0)::int AS lvl2p,
   COALESCE(AVG((created_at::date - checkin_date)::numeric), 0)::numeric AS avg_stay_days,
   COALESCE(SUM(bonus_spent), 0)::numeric AS bonus_spent_sum,
-  services.services_amount
+  MAX(services.services_amount) AS services_amount
 FROM base
 CROSS JOIN services
