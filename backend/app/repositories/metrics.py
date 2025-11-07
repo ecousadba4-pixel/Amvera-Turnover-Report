@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
-from typing import Mapping, Optional, Sequence
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any, Mapping, Optional, Sequence, cast
 
 from psycopg import sql
 
@@ -66,25 +67,51 @@ class MonthlyServiceRecord:
     total_amount: float
 
 
-def _as_int(value: object) -> int:
-    return int(value) if value is not None else 0
+NumericInput = int | float | Decimal | str | None
 
 
-def _as_optional_float(value: object) -> Optional[float]:
-    return float(value) if value is not None else None
+def _normalize_numeric(value: NumericInput) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
 
 
-def _coerce_date(value: object) -> Optional[date]:
+def _as_int(value: NumericInput) -> int:
+    numeric = _normalize_numeric(value)
+    if numeric is None:
+        return 0
+    return int(numeric)
+
+
+def _as_optional_float(value: NumericInput) -> Optional[float]:
+    return _normalize_numeric(value)
+
+
+def _coerce_date(value: date | datetime | None) -> Optional[date]:
     """Convert value to date, handling datetime objects."""
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
+    if value is None:
+        return None
     if hasattr(value, "date") and callable(value.date):
-        result = value.date()  # type: ignore[misc]
+        result = value.date()  # type: ignore[call-arg]
         return result if isinstance(result, date) else None
     return None
 
 
-def _normalize_service_type(raw: object) -> str:
+def _normalize_service_type(raw: str | None) -> str:
     value = str(raw or "").strip()
     return value or "Без категории"
 
@@ -107,7 +134,7 @@ async def fetch_metrics_summary(
         services_filters=services_filters,
     )
 
-    row = await fetchone(query, params) or {}
+    row = cast(Mapping[str, Any], await fetchone(query, params) or {})
     return MetricsSummaryRecord(
         bookings_count=_as_int(row.get("bookings_count")),
         lvl2p=_as_int(row.get("lvl2p")),
@@ -136,7 +163,7 @@ async def fetch_services_listing(
     query_params = {**params, "limit": page_size, "offset": offset}
     rows = await fetchall(query, query_params)
 
-    summary_row: Mapping[str, object] = {}
+    summary_row: Mapping[str, Any] | None = None
     items: list[ServiceUsageRecord] = []
     for row in rows:
         if row.get("is_summary"):

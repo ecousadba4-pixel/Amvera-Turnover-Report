@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
+from app.core.limiter import configure_rate_limiting
 from app.db import close_all_pools
 from app.settings import get_settings
 
@@ -21,6 +22,7 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     application = FastAPI(title="U4S Revenue API", version="1.0.0", lifespan=lifespan)
+    configure_rate_limiting(application)
     _configure_cors(application)
     application.include_router(api_router)
     return application
