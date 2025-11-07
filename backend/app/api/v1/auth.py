@@ -2,20 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+from urllib.parse import parse_qs
 
-from typing import Annotated, Iterable
-
-from fastapi import APIRouter, Body, Form, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.api.dependencies import SettingsDep
 from app.core.limiter import limiter
 from app.core.security import create_access_token
-
-
-class LoginRequest(BaseModel):
-    password: str | None = None
-    login: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -27,39 +22,92 @@ class LoginResponse(BaseModel):
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-LoginPayload = Annotated[LoginRequest | str | None, Body(default=None, embed=False)]
-FormField = Annotated[str | None, Form(default=None)]
+def _extract_password_from_mapping(payload: dict[str, object]) -> str:
+    for key in ("password", "login"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
-def _iter_password_candidates(payload: LoginPayload, form_password: str | None, form_login: str | None) -> Iterable[str]:
-    if isinstance(payload, LoginRequest):
-        if payload.password is not None:
-            yield payload.password
-        if payload.login is not None:
-            yield payload.login
-    elif isinstance(payload, str):
-        yield payload
+def _decode_bytes(data: bytes, charset: str | None = None) -> str:
+    encodings = [charset, "utf-8", "latin-1"]
+    for encoding in encodings:
+        if not encoding:
+            continue
+        try:
+            return data.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return data.decode("utf-8", errors="ignore")
 
-    if form_password is not None:
-        yield form_password
-    if form_login is not None:
-        yield form_login
+
+async def _extract_password(request: Request) -> str:
+    body = await request.body()
+    if not body:
+        return ""
+
+    content_type = request.headers.get("content-type", "").lower()
+    media_type, _, params = content_type.partition(";")
+    media_type = media_type.strip()
+    charset = None
+    if params:
+        for chunk in params.split(";"):
+            name, _, value = chunk.partition("=")
+            if name.strip() == "charset" and value:
+                charset = value.strip().strip('"')
+                break
+
+    if "json" in media_type:
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            pass
+        else:
+            if isinstance(payload, str):
+                return payload.strip()
+            if isinstance(payload, dict):
+                return _extract_password_from_mapping(payload)
+
+    if media_type.startswith("application/x-www-form-urlencoded"):
+        text = _decode_bytes(body, charset)
+        form = parse_qs(text, keep_blank_values=False)
+        for key in ("password", "login"):
+            values = form.get(key) or []
+            for value in values:
+                if value.strip():
+                    return value.strip()
+
+    if media_type.startswith("multipart/form-data"):
+        form = await request.form()
+        for key in ("password", "login"):
+            value = form.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    if media_type == "text/plain" or not media_type:
+        text = _decode_bytes(body, charset).strip()
+        if text:
+            return text
+
+    # Попробуем распарсить JSON даже при неверном заголовке Content-Type
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        text = _decode_bytes(body, charset).strip()
+        return text
+    else:
+        if isinstance(payload, str):
+            return payload.strip()
+        if isinstance(payload, dict):
+            return _extract_password_from_mapping(payload)
+        return ""
 
 
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
-async def login(
-    request: Request,
-    payload: LoginPayload,
-    settings: SettingsDep,
-    password_form: FormField = None,
-    login_form: FormField = None,
-) -> LoginResponse:
-    password = ""
-    for candidate in _iter_password_candidates(payload, password_form, login_form):
-        if isinstance(candidate, str) and candidate.strip():
-            password = candidate.strip()
-            break
+async def login(request: Request, settings: SettingsDep) -> LoginResponse:
+    password = await _extract_password(request)
 
     if not password:
         raise HTTPException(
