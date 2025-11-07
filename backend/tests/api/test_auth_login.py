@@ -64,3 +64,23 @@ def test_login_accepts_login_field_alias() -> None:
     assert response.token_type == "bearer"
     assert isinstance(response.access_token, str)
     assert response.access_token
+
+
+def test_login_accepts_raw_string_payload() -> None:
+    settings = get_settings()
+    request = _make_request()
+    response = asyncio.run(login(request, ADMIN_PASSWORD, settings))
+    assert response.token_type == "bearer"
+    assert isinstance(response.access_token, str)
+    assert response.access_token
+
+
+def test_login_accepts_form_password() -> None:
+    settings = get_settings()
+    request = _make_request()
+    response = asyncio.run(
+        login(request, None, settings, password_form=f"  {ADMIN_PASSWORD}  ")
+    )
+    assert response.token_type == "bearer"
+    assert isinstance(response.access_token, str)
+    assert response.access_token

@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from fastapi import APIRouter, HTTPException, Request, status
+from typing import Annotated, Iterable
+
+from fastapi import APIRouter, Body, Form, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.api.dependencies import SettingsDep
@@ -25,10 +27,40 @@ class LoginResponse(BaseModel):
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+LoginPayload = Annotated[LoginRequest | str | None, Body(default=None, embed=False)]
+FormField = Annotated[str | None, Form(default=None)]
+
+
+def _iter_password_candidates(payload: LoginPayload, form_password: str | None, form_login: str | None) -> Iterable[str]:
+    if isinstance(payload, LoginRequest):
+        if payload.password is not None:
+            yield payload.password
+        if payload.login is not None:
+            yield payload.login
+    elif isinstance(payload, str):
+        yield payload
+
+    if form_password is not None:
+        yield form_password
+    if form_login is not None:
+        yield form_login
+
+
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
-async def login(request: Request, payload: LoginRequest, settings: SettingsDep) -> LoginResponse:
-    password = (payload.password or payload.login or "").strip()
+async def login(
+    request: Request,
+    payload: LoginPayload,
+    settings: SettingsDep,
+    password_form: FormField = None,
+    login_form: FormField = None,
+) -> LoginResponse:
+    password = ""
+    for candidate in _iter_password_candidates(payload, password_form, login_form):
+        if isinstance(candidate, str) and candidate.strip():
+            password = candidate.strip()
+            break
+
     if not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required"
