@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     auth_token_secret: Optional[str] = None
     auth_token_ttl_seconds: int = 3600
     port: int = 8000
+    log_level: str = "INFO"
+    log_json: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="",
@@ -49,6 +51,18 @@ class Settings(BaseSettings):
 
         seed = f"{admin_hash}:token-secret".encode("utf-8")
         return hashlib.sha256(seed).hexdigest()
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: Optional[str]) -> str:
+        if not value:
+            return "INFO"
+
+        if isinstance(value, str):
+            cleaned = value.strip().upper()
+            return cleaned or "INFO"
+
+        raise ValueError("LOG_LEVEL must be a string")
 
 @lru_cache
 def get_settings() -> "Settings":

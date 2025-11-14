@@ -8,6 +8,9 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
+from loguru import Logger
+
+from app.core.logging import bind_logger
 from app.settings import get_settings
 from app.core.limiter import limiter
 from app.core.security import create_access_token
@@ -20,6 +23,12 @@ class LoginResponse(BaseModel):
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _request_context_logger(request: Request) -> Logger:
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "-")
+    return bind_logger(endpoint="auth.login", client_ip=client_ip, user_agent=user_agent)
 
 
 def _extract_password_from_mapping(payload: dict[str, object]) -> str:
@@ -109,14 +118,17 @@ async def _extract_password(request: Request) -> str:
 async def login(request: Request) -> LoginResponse:
     settings = get_settings()
     password = await _extract_password(request)
+    request_logger = _request_context_logger(request)
 
     if not password:
+        request_logger.warning("Попытка входа без пароля")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Password is required"
         )
 
     candidate_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
     if not hmac.compare_digest(candidate_hash, settings.admin_password_sha256):
+        request_logger.warning("Неверный пароль администратора")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
@@ -127,6 +139,7 @@ async def login(request: Request) -> LoginResponse:
         ttl_seconds=settings.auth_token_ttl_seconds,
     )
 
+    request_logger.info("Успешный вход администратора")
     return LoginResponse(
         access_token=token,
         expires_in=max(0, token_payload.expires_at - token_payload.issued_at),
