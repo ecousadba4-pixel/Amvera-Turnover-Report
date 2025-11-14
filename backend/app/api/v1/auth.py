@@ -7,8 +7,10 @@ from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
+from typing import TYPE_CHECKING
 
-from loguru import Logger
+if TYPE_CHECKING:  # pragma: no cover - используется только для подсказок типов
+    from loguru import Logger
 
 from app.core.logging import bind_logger
 from app.settings import get_settings
