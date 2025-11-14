@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.limiter import configure_rate_limiting
+from app.core.logging import configure_logging, logger
 from app.db import close_all_pools
-from app.settings import get_settings
+from app.settings import Settings, get_settings
 
 
 @asynccontextmanager
@@ -21,15 +22,19 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
+    configure_logging(settings)
+    logger.bind(component="app").info("Запуск приложения", env=settings.app_env)
+
     application = FastAPI(title="U4S Revenue API", version="1.0.0", lifespan=lifespan)
     configure_rate_limiting(application)
-    _configure_cors(application)
+    _configure_cors(application, settings)
     application.include_router(api_router)
     return application
 
 
-def _configure_cors(app: FastAPI) -> None:
-    settings = get_settings()
+def _configure_cors(app: FastAPI, settings: Settings | None = None) -> None:
+    settings = settings or get_settings()
     allow_origins, allow_origin_regex = _parse_cors_origins(settings.cors_allow_origins)
 
     app.add_middleware(
