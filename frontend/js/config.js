@@ -1,4 +1,4 @@
-export const DEFAULT_API_BASE = "https://u4s-turnover-karinausadba.amvera.io";
+export const DEFAULT_API_BASE = "https://turnover-api.usadba4.ru";
 
 export const DATE_FIELD_CREATED = "created";
 export const DATE_FIELD_CHECKIN = "checkin";
