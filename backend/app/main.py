@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import re
 
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
@@ -70,6 +71,6 @@ def _cors_pattern_to_regex(pattern: str) -> str:
 
 
 app = create_app()
-
+Instrumentator().instrument(app).expose(app)
 
 __all__ = ["app", "create_app"]
