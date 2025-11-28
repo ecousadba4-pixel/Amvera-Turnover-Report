@@ -1,6 +1,23 @@
 fastapi~=0.115
 uvicorn[standard]~=0.30
+
+# PostgreSQL
 psycopg[binary,pool]~=3.2
+
+# Settings / конфигурации
 pydantic-settings~=2.6
+
+# Rate limiting
 slowapi~=0.1.9
+
+# Логирование
 loguru~=0.7
+
+# Prometheus метрики
+prometheus-fastapi-instrumentator~=6.0.0
+
+# Опционально, но часто нужно, если моделирование/валидация сложная
+pydantic~=2.7
+
+# CORS / HTTP utils (FastAPI их подтягивает сам, но укажем для стабильности)
+starlette~=0.40
