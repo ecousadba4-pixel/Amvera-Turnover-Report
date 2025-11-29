@@ -34,7 +34,7 @@ pip install -r requirements.txt
 pip install pytest          # для локального прогона тестов
 
 # Запуск API (по умолчанию порт 8000)
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8101
 ```
 
 Приложение использует асинхронные пуллы подключений к PostgreSQL (psycopg) и
