@@ -17,8 +17,6 @@ frontend/
   styles.css
   app.js              # Точка входа, подключающая модульную JS-логику
   js/                 # Модули: API-клиенты, сервисы, форматирование, UI
-Dockerfile            # Образ для Amvera/Kaniko (uvicorn + FastAPI)
-amvera.yml            # Декларация сервиса для Amvera (порт 8000)
 ```
 
 ## Backend (FastAPI)
@@ -33,7 +31,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 pip install pytest          # для локального прогона тестов
 
-# Запуск API (по умолчанию порт 8000)
+# Запуск API (по умолчанию порт 8101)
 uvicorn app.main:app --host 0.0.0.0 --port 8101
 ```
 
@@ -64,13 +62,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 8101
 
 Автотесты (`backend/tests/`) покрывают обязательность авторизации и
 конфигурацию CORS.
-
-### Docker / Amvera
-
-* `Dockerfile` собирает минимальный образ: устанавливает зависимости и запускает
-  `uvicorn app.main:app`.
-* `amvera.yml` описывает сервис `u4s-revenue-api`, проксирует порт 8000 и
-  прокидывает переменные окружения.
 
 ## Frontend (Flexbe HTML блок)
 
