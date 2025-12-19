@@ -113,4 +113,3 @@ print(hashlib.sha256("YourPassword".encode()).hexdigest())
 
 Проект распространяется внутри команды Karina Usadba / U4S. Уточните условия
 использования перед внешним распространением.
-test
